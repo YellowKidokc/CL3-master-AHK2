@@ -1,13 +1,12 @@
-﻿/*
+/*
 
 Plugin            : Send()
 Purpose           : Send text char by char (slow)
-Version           : 1.0
-CL3 version       : 1.1
+Version           : 2.0
+CL3 version       : 2.0
 
 */
 
-Send(Text)	{
-	 SendRaw % text
+SendPlugin(Text)	{
+	 SendText(text)
 	}
-	

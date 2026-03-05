@@ -15,7 +15,7 @@ History:
       define Trim options
 - 1.6 Attempt to prevent XMLRoot error - https://github.com/hi5/CL3/issues/15
 - 1.5.1 Fix for hotkey, using much more reliable #If
-- 1.5 Clipchain: you can now define a hotkey (via settings) to "progress to next item" - this will allow you to keep ^v for normal copy/paste actions - see Clipchain HK (settings)
+- 1.5 Clipchain: you can now define a hotkey (via settings) to "progress to next item"
 - 1.4 Added QEDL() for edit and insert (not public)
 - 1.3 Added DoubleClick to paste and progress ClipChain
 - 1.2 Fixed LV_Modify empty parameters because of AutoHotkey v1.1.23.03 update
@@ -23,657 +23,602 @@ History:
 
 */
 
-ClipChainInit:
-IniRead, ClipChainX          , %ClipDataFolder%ClipChain\ClipChain.ini, Settings, ClipChainX, 100
-IniRead, ClipChainY          , %ClipDataFolder%ClipChain\ClipChain.ini, Settings, ClipChainY, 100
-IniRead, ClipChainNoHistory  , %ClipDataFolder%ClipChain\ClipChain.ini, Settings, ClipChainNoHistory , 0
-IniRead, ClipChainTrans      , %ClipDataFolder%ClipChain\ClipChain.ini, Settings, ClipChainTrans     , 0
-IniRead, ClipChainKey        , %ClipDataFolder%ClipChain\ClipChain.ini, Settings, ClipChainKey
-IniRead, ClipChainSend       , %ClipDataFolder%ClipChain\ClipChain.ini, Settings, ClipChainSend
-IniRead, ClipChainPause      , %ClipDataFolder%ClipChain\ClipChain.ini, Settings, ClipChainPause     , 0
-IniRead, ClipChainTrim       , %ClipDataFolder%ClipChain\ClipChain.ini, Settings, ClipChainTrim      , 0
-IniRead, ClipChainTrimSet    , %ClipDataFolder%ClipChain\ClipChain.ini, Settings, ClipChainTrimSet
-IniRead, ClipChainPreview    , %ClipDataFolder%ClipChain\ClipChain.ini, Settings, ClipChainPreview   , 1
+ClipChainInit() {
+	global
+	local iniFile := ClipDataFolder "ClipChain\ClipChain.ini"
 
-If (ClipChainX = "") or (ClipChainX = "ERROR")
-	ClipChainX:=100
-If (ClipChainY = "") or (ClipChainY = "ERROR")
-	ClipChainY:=100
-If (ClipChainKey = "") or (ClipChainKey = "ERROR") or (ClipChainKey = 0)
-	ClipChainKey:="[press to set]"
-If (ClipChainTrimSet = "") or (ClipChainTrimSet = "ERROR") or (ClipChainTrimSet = 0)
-	ClipChainTrimSet:="[press to set]"
-else
-	Gosub, SetTrim
+	ClipChainX          := IniRead(iniFile, "Settings", "ClipChainX", "100")
+	ClipChainY          := IniRead(iniFile, "Settings", "ClipChainY", "100")
+	ClipChainNoHistory  := IniRead(iniFile, "Settings", "ClipChainNoHistory", "0")
+	ClipChainTrans      := IniRead(iniFile, "Settings", "ClipChainTrans", "0")
+	ClipChainKey        := IniRead(iniFile, "Settings", "ClipChainKey", "ERROR")
+	ClipChainSendAfter  := IniRead(iniFile, "Settings", "ClipChainSend", "ERROR")
+	ClipChainPause      := IniRead(iniFile, "Settings", "ClipChainPause", "0")
+	ClipChainTrim       := IniRead(iniFile, "Settings", "ClipChainTrim", "0")
+	ClipChainTrimSet    := IniRead(iniFile, "Settings", "ClipChainTrimSet", "ERROR")
+	ClipChainPreview    := IniRead(iniFile, "Settings", "ClipChainPreview", "1")
 
-If !IsObject(ClipChainData)
-	{
-	 IfExist, %ClipDataFolder%ClipChain\ClipChain.xml
+	If (ClipChainX = "") or (ClipChainX = "ERROR")
+		ClipChainX := 100
+	If (ClipChainY = "") or (ClipChainY = "ERROR")
+		ClipChainY := 100
+	If (ClipChainKey = "") or (ClipChainKey = "ERROR") or (ClipChainKey = 0)
+		ClipChainKey := "[press to set]"
+	If (ClipChainTrimSet = "") or (ClipChainTrimSet = "ERROR") or (ClipChainTrimSet = 0)
+		ClipChainTrimSet := "[press to set]"
+	else
+		SetTrimChars()
+
+	If !IsObject(ClipChainData)
 		{
-		 If (XA_Load(ClipDataFolder "ClipChain\ClipChain.xml") = 1) ; the name of the variable containing the array is returned OR the value 1 in case of error
+		 if FileExist(ClipDataFolder "ClipChain\ClipChain.xml")
 			{
-			 MsgBox, 16, ClipChain, ClipChain.xml seems to be corrupt, starting new empty chain.
-			 FileDelete, %ClipDataFolder%ClipChain\ClipChain.xml
-			 ClipChain:=[]
+			 If (XA_Load(ClipDataFolder "ClipChain\ClipChain.xml") = 1)
+				{
+				 MsgBox("ClipChain.xml seems to be corrupt, starting new empty chain.", "ClipChain", 16)
+				 FileDelete(ClipDataFolder "ClipChain\ClipChain.xml")
+				 ClipChainData := []
+				}
+			}
+		 else
+			{
+			 ClipChainData := []
 			}
 		}
-	 else
+
+	ClipChainIndex := 1
+	LVM_SUBITEMHITTEST := 4096 + 57
+
+	ClipChainInsSpecial := ""
+
+	; Build insert menus
+	InsertClipChainMenuSpecial := Menu()
+	InsertClipChainMenuSpecial.Add("Clipboard", InsertClipChainMenuHandler)
+	Loop 10
+		InsertClipChainMenuSpecial.Add("Slot " A_Index, InsertClipChainMenuHandler)
+
+	InsertClipChainMenu := Menu()
+	InsertClipChainMenu.Add("Insert new entry", ClipChainInsertHandler)
+	InsertClipChainMenu.Add("Insert special", InsertClipChainMenuSpecial)
+
+	; Build ClipChain load/save menu
+	ClipChainMenu := Menu()
+	ClipChainMenu.Add("Load from Clipboard (Default)", ClipChainLoad)
+	ClipChainMenu.Add("Load from Clipboard (Set Delim)", ClipChainLoadDelim)
+	ClipChainMenu.Add()
+	ClipChainMenu.Add("Load from File", ClipChainLoadFile)
+	ClipChainMenu.Add("Save to File", ClipChainSaveFile)
+	ClipChainMenu.Add()
+	ClipChainMenu.Add("Clear ClipChain", ClipChainClear)
+
+	; Build GUI
+	ClipChainGui := Gui(, "CL3ClipChain")
+	ClipChainGui.Opt("+Border +ToolWindow +AlwaysOnTop +E0x08000000")
+	ClipChainGui.OnEvent("Close", ClipChainGuiCloseHandler)
+	ClipChainGui.OnEvent("Escape", ClipChainGuiCloseHandler)
+	ClipChainGui.SetFont(dpi("s8"))
+	ogcLV := ClipChainGui.Add("ListView", dpi("x0 y0 w185 h350 NoSortHdr grid vLVCGIndex"), ["?", "ClipChain", "IDX"])
+	ogcLV.OnEvent("Click", ClipChainClicked)
+	HLV := ogcLV.Hwnd
+	ogcLV.ModifyCol(1, dpi() * 25)
+	ogcLV.ModifyCol(2, dpi() * 160)
+	ogcLV.ModifyCol(3, 0)
+
+	ClipChainListviewPopulate()
+
+	ClipChainGui.SetFont(dpi("s8"))
+	ClipChainGui.Add("GroupBox", dpi("x2 yp+355 w181 h50 vGbox1"), "Chain(s)")
+	ClipChainGui.Add("Button", dpi("xp+8 yp+18 w26 h26"), Chr(0x25B2)).OnEvent("Click", ClipChainMoveUp)
+	ClipChainGui.Add("Button", dpi("xp+28 yp w26 h26"), Chr(0x25BC)).OnEvent("Click", ClipChainMoveDown)
+	ClipChainGui.Add("Button", dpi("xp+28 yp w26 h26"), "Ins").OnEvent("Click", (*) => InsertClipChainMenu.Show())
+	ClipChainGui.SetFont(dpi("s11"))
+	ClipChainGui.Add("Button", dpi("xp+28 yp w26 h26"), Chr(0x270E)).OnEvent("Click", ClipChainEditHandler)
+	ClipChainGui.SetFont()
+	ClipChainGui.SetFont(dpi("s12 bold"))
+	ClipChainGui.Add("Button", dpi("xp+28 yp w26 h26"), "X").OnEvent("Click", ClipChainDel)
+	ClipChainGui.SetFont()
+	ClipChainGui.SetFont(dpi("s11"))
+	ClipChainGui.Add("Button", dpi("xp+28 yp w26 h26"), Chr(0x1F4C2)).OnEvent("Click", (*) => ClipChainMenu.Show())
+	ClipChainGui.SetFont()
+	ClipChainGui.SetFont(dpi("s8"))
+	ClipChainGui.Add("GroupBox", dpi("x2 yp+40 w181 h170 vGbox2"), "Options")
+	ogcNoHistory := ClipChainGui.Add("Checkbox", dpi("xp+10 yp+18 w75 h24 vClipChainNoHistory"), "No History")
+	ogcNoHistory.OnEvent("Click", ClipChainCheckboxHandler)
+	ogcNoHistory.Value := ClipChainNoHistory
+	ogcTrans := ClipChainGui.Add("Checkbox", dpi("xp+80 yp w85 h24 vClipChainTrans"), "Transparent")
+	ogcTrans.OnEvent("Click", ClipChainCheckboxHandler)
+	ogcTrans.Value := ClipChainTrans
+	ogcSendAfter := ClipChainGui.Add("Checkbox", dpi("xp-80 yp+30 w75 h24 vClipChainSendAfter"), "Send after")
+	ogcSendAfter.OnEvent("Click", ClipChainCheckboxHandler)
+	ogcSendAfter.Value := ClipChainSendAfter != "ERROR" ? ClipChainSendAfter : 0
+	ogcKeyBtn := ClipChainGui.Add("Button", dpi("xp+80 yp w85 h24 vClipChainKeyBtn"), ClipChainKey)
+	ogcKeyBtn.OnEvent("Click", ClipChainKeyUpdate)
+	ogcTrimCb := ClipChainGui.Add("Checkbox", dpi("xp-80 yp+30 w75 h24 vClipChainTrim"), "Trim")
+	ogcTrimCb.OnEvent("Click", ClipChainCheckboxHandler)
+	ogcTrimCb.Value := ClipChainTrim
+	ogcTrimBtn := ClipChainGui.Add("Button", dpi("xp+80 yp w85 h24 vClipChainTrimBtn"), ClipChainTrimSet)
+	ogcTrimBtn.OnEvent("Click", ClipChainTrimUpdate)
+	ogcPause := ClipChainGui.Add("Checkbox", dpi("xp-80 yp+30 w75 h24 vClipChainPause"), "Pause")
+	ogcPause.OnEvent("Click", ClipChainCheckboxHandler)
+	ogcPause.Value := ClipChainPause
+	ClipChainGui.Add("Button", dpi("xp+80 yp w85 h24"), "Close ClipChain").OnEvent("Click", ClipChainGuiCloseHandler)
+	ogcPreview := ClipChainGui.Add("Checkbox", dpi("xp-80 yp+30 w150 h24 vClipChainPreview"), "Show preview TT on Hover")
+	ogcPreview.OnEvent("Click", ClipChainCheckboxHandler)
+	ogcPreview.Value := ClipChainPreview
+
+	ClipChainCheckboxHandler()
+	ClipChainLvHandle := LV_Rows(HLV)
+}
+
+SetTrimChars() {
+	global ClipChainTrimSet, TrimSet
+	TrimSet := ClipChainTrimSet
+	TrimSet := StrReplace(TrimSet, "\n", "`n")
+	TrimSet := StrReplace(TrimSet, "\r", "`r")
+	TrimSet := StrReplace(TrimSet, "\t", "`t")
+	TrimSet := StrReplace(TrimSet, "\s", " ")
+}
+
+ClipChainTrimUpdate(*) {
+	global ClipChainTrimSet, ClipChainGui
+	ib := InputBox("Set Trim characters Delimiter(s) (\n,\r,\t,\s)`nTrims Left and Right", "ClipChain Trim characters", "w300 h140", ClipChainTrimSet)
+	If (ib.Result = "Cancel")
+		Return
+	ClipChainTrimSet := ib.Value
+	If (ClipChainTrimSet = "")
 		{
-		 ClipChain:=[]
-		}
-	}
-
-ClipChainIndex:=1
-LVM_SUBITEMHITTEST := 4096 + 57
-
-;ClipboardPrivateRulesFunc:="ClipboardPrivateRules"
-
-ClipChainInsSpecial:=""
-Menu, InsertClipChainMenu, Add
-Menu, InsertClipChainMenu, Delete
-Menu, InsertClipChainMenuSpecial, Add
-Menu, InsertClipChainMenuSpecial, Delete
-Menu, InsertClipChainMenuSpecial, Add, Clipboard, InsertClipChainMenuHandler
-Menu, InsertClipChainMenuSpecial, Add, Slot 1, InsertClipChainMenuHandler
-Menu, InsertClipChainMenuSpecial, Add, Slot 2, InsertClipChainMenuHandler
-Menu, InsertClipChainMenuSpecial, Add, Slot 3, InsertClipChainMenuHandler
-Menu, InsertClipChainMenuSpecial, Add, Slot 4, InsertClipChainMenuHandler
-Menu, InsertClipChainMenuSpecial, Add, Slot 5, InsertClipChainMenuHandler
-Menu, InsertClipChainMenuSpecial, Add, Slot 6, InsertClipChainMenuHandler
-Menu, InsertClipChainMenuSpecial, Add, Slot 7, InsertClipChainMenuHandler
-Menu, InsertClipChainMenuSpecial, Add, Slot 8, InsertClipChainMenuHandler
-Menu, InsertClipChainMenuSpecial, Add, Slot 9, InsertClipChainMenuHandler
-Menu, InsertClipChainMenuSpecial, Add, Slot 10, InsertClipChainMenuHandler
-Menu, InsertClipChainMenu, Add, Insert new entry, ClipChainInsert
-Menu, InsertClipChainMenu, Add, Insert special, :InsertClipChainMenuSpecial
-
-Menu, ClipChainMenu, Add
-Menu, ClipChainMenu, Delete
-
-Menu, ClipChainMenu, Add, Load from Clipboard (Default), ClipChainLoad
-Menu, ClipChainMenu, Add, Load from Clipboard (Set Delim), ClipChainLoadDelim
-Menu, ClipChainMenu, Add
-Menu, ClipChainMenu, Add, Load from File, ClipChainLoadFile
-Menu, ClipChainMenu, Add, Save to File, ClipChainSaveFile
-Menu, ClipChainMenu, Add
-Menu, ClipChainMenu, Add, Clear ClipChain, ClipChainClear
-
-Gui, ClipChain:Default
-Gui, ClipChain:+Border +ToolWindow +AlwaysOnTop +E0x08000000 ; +E0x08000000 = WS_EX_NOACTIVATE ; ontop and don't activate
-Gui, ClipChain:Font, % dpi("s8")
-Gui, ClipChain:Add, Listview, % dpi("x0 y0 w185 h350 NoSortHdr grid vLVCGIndex gClipChainClicked hwndHLV"),?|ClipChain|IDX
-LV_ModifyCol(1,dpi()*25)
-LV_ModifyCol(2,dpi()*160)
-LV_ModifyCol(3,*0)
-;LV_ModifyCol(2,100) ; debug
-;LV_ModifyCol(3,30)  ; debug
-Gosub, ClipChainListview
-
-Gui, ClipChain:font,% dpi("s8")
-Gui, ClipChain:Add, GroupBox, % dpi("x2 yp+355 w181 h50 vGbox1"), Chain(s)
-Gui, ClipChain:Add, Button, % dpi("xp+8  yp+18 w26 h26   gClipChainMoveUp   vButton1"), % Chr(0x25B2) ; ▲
-Gui, ClipChain:Add, Button, % dpi("xp+28 yp    w26 h26   gClipChainMoveDown vButton2"), % Chr(0x25BC) ; ▼
-Gui, ClipChain:Add, Button, % dpi("xp+28 yp    w26 h26   gClipChainInsertMenu vButton3"), Ins
-Gui, ClipChain:font,% dpi("s11") ; " Wingdings"
-Gui, ClipChain:Add, Button, % dpi("xp+28 yp    w26 h26   gClipChainEdit     vButton4"), % Chr(0x270E) ; ✎ ; % Chr(33) ; Edit (pencil)
-Gui, ClipChain:font
-Gui, ClipChain:font, % dpi("s12 bold")
-Gui, ClipChain:Add, Button, % dpi("xp+28 yp    w26 h26   gClipChainDel      vButton5"), % Chr(0x1f5d1) ; trashcan ; X ; Del (X)
-Gui, ClipChain:font
-Gui, ClipChain:font,% dpi("s11") ; " Wingdings "
-Gui, ClipChain:Add, Button, % dpi("xp+28 yp    w26 h26   gClipChainMenu     vButton6"), % Chr(0x1F4C2) ; open folder 📂; % Chr(49)
-Gui, ClipChain:font
-Gui, ClipChain:font,% dpi("s8")
-Gui, ClipChain:Add, GroupBox, % dpi("x2 yp+40 w181 h170 vGbox2"), Options
-Gui, ClipChain:Add, Checkbox, % dpi("xp+10 yp+18  w75 h24 vClipChainNoHistory gClipChainCheckboxes"), No History
-Gui, ClipChain:Add, Checkbox, % dpi("xp+80 yp     w85 h24 vClipChainTrans     gClipChainCheckboxes"), Transparent
-Gui, ClipChain:Add, Checkbox, % dpi("xp-80 yp+30  w75 h24 vClipChainSend      gClipChainCheckboxes"), Send after
-Gui, ClipChain:Add, Button  , % dpi("xp+80 yp     w85 h24 vClipChainKey       gClipChainKeyUpdate" ), %ClipChainKey%
-Gui, ClipChain:Add, Checkbox, % dpi("xp-80 yp+30  w75 h24 vClipChainTrim      gClipChainCheckboxes"), Trim
-Gui, ClipChain:Add, Button  , % dpi("xp+80 yp     w85 h24 vClipChainTrimSet   gClipChainTrimUpdate"), %ClipChainTrimSet%
-
-Gui, ClipChain:Add, Checkbox, % dpi("xp-80 yp+30  w75 h24 vClipChainPause     gClipChainCheckboxes"), Pause
-Gui, ClipChain:Add, Button  , % dpi("xp+80 yp     w85 h24 vClipChainGuiClose  gClipChainGuiClose"  ), Close ClipChain
-Gui, ClipChain:Add, Checkbox, % dpi("xp-80 yp+30 w150 h24 vClipChainPreview   gClipChainCheckboxes"), Show preview TT on Hover
-
-GuiControl, ClipChain:, ClipChainNoHistory  , %ClipChainNoHistory%
-GuiControl, ClipChain:, ClipChainTrans      , %ClipChainTrans%
-GuiControl, ClipChain:, ClipChainKey        , %ClipChainKey%
-GuiControl, ClipChain:, ClipChainTrim       , %ClipChainTrim%
-GuiControl, ClipChain:, ClipChainPause      , %ClipChainPause%
-GuiControl, ClipChain:, ClipChainPreview    , %ClipChainPreview%
-
-Gosub, ClipChainCheckboxes
-ClipChainLvHandle := New LV_Rows(HLV)
-
-Return
-
-ClipChainTrimUpdate:
-InputBox, ClipChainTrimSet, ClipChain Trim characters, Set Trim characters Delimiter(s) (\n`,\r`,\t`,\s`)`nTrims Left and Right, , 300, 140, , , , , %ClipChainTrimSet%
-If ErrorLevel
-	Return
-If (ClipChainTrimSet = "")
-	{
-	 ClipChainTrimSet := "[press to set]"
-	 GuiControl, ClipChain:, ClipChainTrimSet       , %ClipChainTrimSet%
-	 Return
-	}
-GuiControl, ClipChain:, ClipChainTrimSet      , %ClipChainTrimSet%
-SetTrim:
-TrimSet:=ClipChainTrimSet
-TrimSet:=StrReplace(TrimSet,"\n","`n")
-TrimSet:=StrReplace(TrimSet,"\r","`r")
-TrimSet:=StrReplace(TrimSet,"\t","`t")
-TrimSet:=StrReplace(TrimSet,"\s"," ")
-Return
-
-
-
-ClipChainKeyUpdate:
-InputBox, ClipChainKey, ClipChain Send after Paste, Send key(s) after paste (AutoHotkey notation), , 300, 130, , , , , %ClipChainKey%
-If ErrorLevel
-	Return
-If (ClipChainKey = "")
-	{
-	 ClipChainKey := "[press to set]"
-	 GuiControl, ClipChain:, ClipChainKey      , %ClipChainKey%
-	 Return
-	}
-GuiControl, ClipChain:, ClipChainKey      , %ClipChainKey%
-Return
-
-#IfWinExist CL3ClipChain ahk_class AutoHotkeyGUI
-~LButton::
-If ClipChainPause
-	Return
-If (A_TimeSincePriorHotkey<400) and (A_TimeSincePriorHotkey<>-1)
-	{ ; check if you double clicked on the listview if so move away focus from listview otherwise we couldn't set the new active item by double clicking in the LV
-	 ControlGetFocus, CL3ClipChainListview, CL3ClipChain ahk_class AutoHotkeyGUI
-	 If (CL3ClipChainListview = "SysListView321")
-		{
-		 ControlFocus, Button12, CL3ClipChain ahk_class AutoHotkeyGUI ; Button12 is Close ClipChain
+		 ClipChainTrimSet := "[press to set]"
+		 ClipChainGui["ClipChainTrimBtn"].Text := ClipChainTrimSet
 		 Return
 		}
-	 Gosub, ClipChainPasteDoubleClick
-	}
-Return
-#IfWinActive
+	ClipChainGui["ClipChainTrimBtn"].Text := ClipChainTrimSet
+	SetTrimChars()
+}
 
-#If ClipChainActive()
-
-;$^v::
-ClipChainPasteDoubleClick:
-Gui, ClipChain:Default
-Gui, ClipChain:Submit, NoHide
-If ClipChainPause
-	Return
-If (ClipChainIndex > ClipChainData.MaxIndex())
-	{
-	 ClipChainIndex:=1
-	}
-If ClipChainNoHistory
-	OnClipboardChange("FuncOnClipboardChange", 0)
-;If IsFunc(ClipboardPrivateRulesFunc)
-;	%ClipboardPrivateRulesFunc%("ClipChain")
-
-If InStr(ClipChainData[ClipChainIndex], "{CL3.ClipChain=")
-	{
-	 If (ClipChainData[ClipChainIndex] = "{CL3.ClipChain=Clipboard}")
-		Clipboard:=Clipboard
-	 else
+ClipChainKeyUpdate(*) {
+	global ClipChainKey, ClipChainGui
+	ib := InputBox("Send key(s) after paste (AutoHotkey notation)", "ClipChain Send after Paste", "w300 h130", ClipChainKey)
+	If (ib.Result = "Cancel")
+		Return
+	ClipChainKey := ib.Value
+	If (ClipChainKey = "")
 		{
-		 SlotIDChainInsert:=SubStr(ClipChainData[ClipChainIndex],20,1)
-		 Clipboard:=Slots[SlotIDChainInsert]
-		 SlotIDChainInsert:=""
+		 ClipChainKey := "[press to set]"
+		 ClipChainGui["ClipChainKeyBtn"].Text := ClipChainKey
+		 Return
 		}
-	}
-else
-	Clipboard:=ClipChainData[ClipChainIndex]
+	ClipChainGui["ClipChainKeyBtn"].Text := ClipChainKey
+}
 
-If ClipChainTrim
-	{
-	 Clipboard:=Trim(Clipboard,TrimSet)
-	}
-PasteIt()
-Sleep 100
-Clipboard:=History[1].text
-If ClipChainNoHistory
-	OnClipboardChange("FuncOnClipboardChange", 1)
-stats.clipchain++
-ClipChainIndex++
-If ClipChainSend and (ClipChainKey <> "[press to set]")
-	Send % ClipChainKey
-Gosub, ClipChainUpdateIndicator
-Return
-#If
+ClipChainPasteDoubleClick(*) {
+	global ClipChainData, ClipChainIndex, ClipChainNoHistory, ClipChainTrim, TrimSet
+	global ClipChainSendAfter, ClipChainKey, ClipChainPause, History, stats, Slots, ClipChainGui, ogcLV
 
-;^#F11::
-hk_clipchain:
-If !WinExist("CL3ClipChain ahk_class AutoHotkeyGUI")
-	{
-	 ; https://www.autohotkey.com/boards/viewtopic.php?t=77789
-	 OnMessage( WM_MOUSEMOVE := 0x200, "WM_MOUSEMOVE" ) ; monitor mouse moving over our windowOnMessage( WM_MOUSEMOVE := 0x200, "WM_MOUSEMOVE" ) ; monitor mouse moving over our window
-	 Gui, ClipChain:Show, % dpi("w185 NA x") ClipChainX " y" ClipChainY, CL3ClipChain
-	}
-else
- 	{
-	 Gosub, ClipChainSaveWindowPosition
-	 Gui, ClipChain:Hide
- 	}
-Gosub, ClipChainCheckboxes
-Return
+	saved := ClipChainGui.Submit(false)
+	If saved.ClipChainPause
+		Return
+	If (ClipChainIndex > ClipChainData.Length)
+		ClipChainIndex := 1
 
-ClipChainMenu:
-Menu, ClipChainMenu, Show
-Return
+	If saved.ClipChainNoHistory
+		OnClipboardChange(FuncOnClipboardChange, 0)
 
-ClipChainSaveFile:
-SaveAsName:=""
-Gui, ClipChain:Submit, Hide
-InputBox, SaveAsName, Name for XML, Save Clipchain as
-If (SaveAsName = "")
-	{
-	 MsgBox, Enter filename!`nSlots not saved.
-	 Gui, ClipChain:Show
-	 Return
-	}
-StringReplace, SaveAsName, SaveAsName, .xml,,All
-XA_Save("ClipChainData", ClipDataFolder "ClipChain\" SaveAsName ".xml") ; put variable name in quotes
-Return
-
-ClipChainClear:
-Gui, ClipChain:Default
-LV_Delete()
-ClipChainDataNew:=[]
-Return
-
-ClipChainSet:
-ClipChainNewOrder:=""
-ClipChainDataNew:=[]
-ClipChainIns:=""
-ClipChainDataIndex:=""
-Loop, % LV_GetCount()
-	{
-	 LV_GetText(ClipChainDataIndex, A_Index, 3)
-	 ClipChainNewOrder .= ClipChainDataIndex ","
-	}
-ClipChainNewOrder:=RTrim(ClipChainNewOrder,",")
-Loop, parse, ClipChainNewOrder, CSV
-	ClipChainDataNew.push(ClipChainData[A_LoopField])
-ClipChainData:=[]
-ClipChainData:=ClipChainDataNew
-ClipChainDataNew:=[]
-Gosub, ClipChainUpdateIDX
-Gosub, ClipChainUpdateIndicator
-Return
-
-ClipChainUpdateIDX:
-Loop, % LV_GetCount()
-	LV_Modify(A_Index,"Col3",A_Index)
-Return
-
-ClipChainInsertMenu:
-Menu, InsertClipChainMenu, Show
-Return
-
-ClipChainEdit: ; falls through to Insert
-ClipChainGuiTitle:="CL3ClipChain Edit text"
-ClipChainInsEdit:=1
-
-ClipChainInsert:
-If (ClipChainGuiTitle = "")
-	ClipChainGuiTitle:="CL3ClipChain Insert text"
-ClipChainInsertCounter:=1
-ClipChainPauseStore:=ClipChainPause
-ClipChainPause:=1
-GuiControl, ClipChain:, ClipChainPause      , %ClipChainPause%
-
-If !ClipChainInsSpecial
-	ClipChainIns:=""
-Else
-	{
-	 ClipChainIns:=ClipChainInsSpecial
-	}
-ClipChainDataIndex:=""
-Gui, ClipChain:Default
-Gui, ClipChain:Submit, NoHide
-LVCGIndex := LV_GetNext()
-If (LVCGIndex = 0)
-	LVCGIndex = 1
-LV_GetText(ClipChainDataIndex, LVCGIndex, 3)
-If (ClipChainDataIndex = "")
-	{
-	 ClipChainDataIndex:=1
-	 ClipChainInsertCounter:=0
-	}
-If (ClipChainInsEdit = 1)
-	ClipChainIns:=ClipChainData[ClipChainDataIndex]
-If !ClipChainInsSpecial
-	Gosub, ClipChainInsertGui
-ClipChainInsSpecial:=""
-If (ClipChainIns = "")
-	{
-	 ClipChainPause:=ClipChainPauseStore
-	 ClipChainPauseStore:=""
-	 GuiControl, ClipChain:, ClipChainPause      , %ClipChainPause%
-	 Return
-	}
-If (ClipChainInsEdit = 1)
-	{
-	 ClipChainData[ClipChainDataIndex]:=ClipChainIns
-	 If (ClipChainInsertCounter = 0)
-	 	LV_Add(1,,,,1)
-	 LV_Modify(ClipChainDataIndex,"Col2",ClipChainHelper(ClipChainIns))
-	}
-else
-	{
-	 ClipChainData.InsertAt(ClipChainDataIndex+ClipChainInsertCounter,ClipChainIns)
-	 LV_Insert(ClipChainDataIndex+1, , , ClipChainHelper(ClipChainIns))
-	}
-Gosub, ClipChainUpdateIDX
-ClipChainInsEdit:=0
-
-ClipChainPause:=ClipChainPauseStore
-ClipChainPauseStore:=""
-GuiControl, ClipChain:, ClipChainPause      , %ClipChainPause%
-ClipChainGuiTitle:=""
-Gosub, ClipChainSet
-XMLSave("ClipChainData")
-Return
-
-ClipChainInsertGui:
-ClipChainInsertActive:=0
-
-; not public
-;@Ahk2Exe-IgnoreBegin
-#include *i %A_ScriptDir%\plugins\MyQEDLG-ClipChain.ahk
-;@Ahk2Exe-IgnoreEnd
-
-Gui, ClipChainInsertGui:Destroy
-Gui, ClipChainInsertGui:Add, Text, x5 y5, Insert text into chain after %ClipChainDataIndex% item:
-Gui, ClipChainInsertGui:Add, Edit, xp yp+20 w500 h300 vClipChainIns, %ClipChainIns%
-Gui, ClipChainInsertGui:Add, Button, gClipChainInsertGuiOK w100, OK
-Gui, ClipChainInsertGui:Add, Button, xp+120 gClipChainInsertGuiCancel w100, Cancel
-Gui, ClipChainInsertGui:Show, , %ClipChainGuiTitle%
-	While (ClipChainInsertActive = 0)
+	If InStr(ClipChainData[ClipChainIndex], "{CL3.ClipChain=")
 		{
-		 Sleep 20
-		}
-Return
-
-ClipChainDel:
-XMLSave("ClipChainData","-" A_Now)
-ClipChainDataIndex:=""
-Gui, ClipChain:Default
-Gui, ClipChain:Submit, NoHide
-LVCGIndex := LV_GetNext()
-If (LVCGIndex = 0)
-	LVCGIndex = 1
-LV_GetText(ClipChainDataIndex, LVCGIndex, 3)
-for k, v in ClipChainData
-	if (v = ClipChainData[ClipChainDataIndex])
-		LV_Delete(A_Index)
-If (ClipChainData.Length() <> 0)
-	ClipChainData.RemoveAt(ClipChainDataIndex)
-Gosub, ClipChainUpdateIDX
-Gosub, ClipChainSet
-XMLSave("ClipChainData")
-Return
-
-ClipChainCheckboxes:
-Gui, ClipChain:Default
-Gui, ClipChain:Submit, NoHide
-
-; no longer used v1.95
-;If ClipChainNoHistory
-;	ScriptClipClipChain:=1
-;else If !ClipChainNoHistory
-;	ScriptClipClipChain:=0
-
-If ClipChainTrans
-	WinSet, Transparent, 200, CL3ClipChain ahk_class AutoHotkeyGUI
-else If !ClipChainTrans
-	WinSet, Transparent, 255, CL3ClipChain ahk_class AutoHotkeyGUI
-
-Return
-
-ClipChainClicked:
-Gui, ClipChain:Default
-ClipChainIndex:=A_EventInfo
-Gosub, ClipChainUpdateIndicator
-Return
-
-ClipChainLoadDelim:
-CCDelim:=""
-InputBox, CCDelim, ClipChain Delimiter, Set Delimiter(s) CSV (\n`,\r`,\t`,\s`,\c)`nUse \c for comma, , 300, 140, , , , , \n
-If ErrorLevel or  or (CCDelim = "")
-	 Return
-
-CCDelim:=StrReplace(CCDelim,"\n","`n")
-CCDelim:=StrReplace(CCDelim,"\r","`r")
-CCDelim:=StrReplace(CCDelim,"\t","`t")
-CCDelim:=StrReplace(CCDelim,"\s"," ")
-
-ClipChainLoad:
-XMLSave("ClipChainData","-" A_Now)
-ClipChainIndex:=1
-ClipChainData:=RegExReplace(Clipboard,"m)^\s+$") ; v1.1 remove white space from empty lines
-If (Asc(SubStr(ClipChainData,1,1)) = 65279) ; fix: remove BOM char from first entry, could mess up a file path...
-	ClipChainData:=SubStr(ClipChainData,2)
-;StringReplace,ClipChainData,ClipChainData,`r`n`r`n, % Chr(7), All
-
-If CCDelim
-	{
-	 Loop, parse, CCDelim, CSV
-		{
-		 If (A_LoopField = "\c")
+		 If (ClipChainData[ClipChainIndex] = "{CL3.ClipChain=Clipboard}")
+			A_Clipboard := A_Clipboard
+		 else
 			{
-			 ClipChainData:=StrReplace(ClipChainData,",",Chr(7))
-			 continue
+			 SlotIDChainInsert := SubStr(ClipChainData[ClipChainIndex], 20, 1)
+			 A_Clipboard := Slots.Length >= Integer(SlotIDChainInsert) ? Slots[Integer(SlotIDChainInsert) + 1] : ""
 			}
-		 ClipChainData:=StrReplace(ClipChainData,A_LoopField,Chr(7))
 		}
+	else
+		A_Clipboard := ClipChainData[ClipChainIndex]
+
+	If saved.ClipChainTrim
+		A_Clipboard := Trim(A_Clipboard, TrimSet)
+
+	PasteIt()
+	Sleep(100)
+	A_Clipboard := History[1]["text"]
+	If saved.ClipChainNoHistory
+		OnClipboardChange(FuncOnClipboardChange, 1)
+	stats["clipchain"]++
+	ClipChainIndex++
+	If saved.ClipChainSendAfter and (ClipChainKey != "[press to set]")
+		Send(ClipChainKey)
+	ClipChainUpdateIndicator()
+}
+
+hk_clipchain_handler(*) {
+	global ClipChainGui, ClipChainX, ClipChainY, Mouse_Hwnd
+	If !WinExist("CL3ClipChain ahk_class AutoHotkeyGUI")
+		{
+		 OnMessage(0x200, WM_MOUSEMOVE)
+		 ClipChainGui.Show(dpi("w185 NA x") ClipChainX " y" ClipChainY)
+		}
+	else
+		{
+		 ClipChainSaveWindowPosition()
+		 ClipChainGui.Hide()
+		}
+	ClipChainCheckboxHandler()
+}
+
+hk_clipchainpaste_defaultpaste(*) {
+	; Default paste when clipchain is not active
+	Send("^v")
+}
+
+ClipChainCheckboxHandler(*) {
+	global ClipChainGui, ClipChainTrans
+	try {
+		saved := ClipChainGui.Submit(false)
+		ClipChainTrans := saved.ClipChainTrans
+		If ClipChainTrans
+			WinSetTransparent(200, "CL3ClipChain ahk_class AutoHotkeyGUI")
+		else
+			WinSetTransparent(255, "CL3ClipChain ahk_class AutoHotkeyGUI")
 	}
+}
 
-If !CCDelim
-	{
-	 CCDelim:="`r`n`r`n"
-	 ClipChainData:=StrReplace(ClipChainData,CCDelim, Chr(7))
-	}
+ClipChainClicked(ctrl, info) {
+	global ClipChainIndex, ogcLV
+	ClipChainIndex := info
+	ClipChainUpdateIndicator()
+}
 
-;@Ahk2Exe-IgnoreBegin
-#Include *i %A_ScriptDir%\plugins\ClipChainPrivateRules.ahk
-;@Ahk2Exe-IgnoreEnd
-
-ClipChainData:=StrSplit(ClipChainData,Chr(7))
-CCDelim:=""
-
-ClipChainListview:
-Gui, ClipChain:Default
-ClipChainIndex:=1
-LV_Delete()
-for k,v in ClipChainData
-	LV_Add("", "", ClipChainHelper(v), A_Index)
-LV_Modify(1,"Col1", "||")
-XMLSave("ClipChainData")
-Return
+ClipChainListviewPopulate() {
+	global ClipChainData, ClipChainIndex, ogcLV
+	ClipChainIndex := 1
+	ogcLV.Delete()
+	for k, v in ClipChainData
+		ogcLV.Add("", "", ClipChainHelper(v), A_Index)
+	ogcLV.Modify(1, "Col1", "||")
+	XMLSave("ClipChainData")
+}
 
 ClipChainHelper(in) {
-	StringReplace, in, in, `r`n, \n, All
-	StringReplace, in, in, `n, \n, All
-	StringReplace, in, in, `r, \n, All
+	in := StrReplace(in, "`r`n", "\n")
+	in := StrReplace(in, "`n", "\n")
+	in := StrReplace(in, "`r", "\n")
 	return in
 }
 
-ClipChainUpdateIndicator:
-Gui, ClipChain:Default
-Loop, % ClipChainData.MaxIndex()
-	LV_Modify(A_Index,"Col1"," ")
+ClipChainUpdateIndicator() {
+	global ClipChainData, ClipChainIndex, ogcLV
+	Loop ClipChainData.Length
+		ogcLV.Modify(A_Index, "Col1", " ")
 
-If (ClipChainIndex > ClipChainData.MaxIndex()) or (ClipChainIndex <= 1)
-	{
-	 LV_Modify(1,"Col1","||")
-	 LV_Modify(1, "Vis")
-	 return
-	}
-
-LV_Modify(ClipChainIndex,"Col1",">>")
-LV_Modify(ClipChainIndex, "Vis")
-
-Return
-
-ClipChainGuiEscape:
-ClipChainGuiClose:
-ScriptClipClipChain:=0
-Gosub, ClipChainSaveWindowPosition
-Gosub, ClipChainSet
-Gui, ClipChain:Default
-Gui, ClipChain:Submit, Hide
-XA_Save("ClipChainData",ClipDataFolder "ClipChain\ClipChain.xml")
-Return
-
-ClipChainSaveWindowPosition:
-WinGetPos, ClipChainX, ClipChainY, , , CL3ClipChain ahk_class AutoHotkeyGUI
-IniWrite, %ClipChainX%, %ClipDataFolder%ClipChain\ClipChain.ini, Settings, ClipChainX
-IniWrite, %ClipChainY%, %ClipDataFolder%ClipChain\ClipChain.ini, Settings, ClipChainY
-IniWrite, %ClipChainNoHistory%   , %ClipDataFolder%ClipChain\ClipChain.ini, Settings, ClipChainNoHistory
-IniWrite, %ClipChainTrans%       , %ClipDataFolder%ClipChain\ClipChain.ini, Settings, ClipChainTrans
-If (ClipChainKey = "[press to set]")
-	ClipChainKey:=""
-IniWrite, %ClipChainKey%         , %ClipDataFolder%ClipChain\ClipChain.ini, Settings, ClipChainKey
-IniWrite, %ClipChainSend%        , %ClipDataFolder%ClipChain\ClipChain.ini, Settings, ClipChainSend
-IniWrite, %ClipChainPause%       , %ClipDataFolder%ClipChain\ClipChain.ini, Settings, ClipChainPause
-IniWrite, %ClipChainPreview%     , %ClipDataFolder%ClipChain\ClipChain.ini, Settings, ClipChainPreview
-
-IniWrite, %ClipChainTrim%     , %ClipDataFolder%ClipChain\ClipChain.ini, Settings, ClipChainTrim
-If (ClipChainTrimSet = "[press to set]")
-	ClipChainTrimSet:=""
-IniWrite, %ClipChainTrimSet%     , %ClipDataFolder%ClipChain\ClipChain.ini, Settings, ClipChainTrimSet
-Return
-
-ClipChainMoveUp:
-ClipChainLvHandle.Move(1) ; Move selected rows up.
-Gosub, ClipChainSet
-return
-
-ClipChainMoveDown:
-ClipChainLvHandle.Move() ; Move selected rows down.
-Gosub, ClipChainSet
-return
-
-ClipChainInsertGuiGuiExit:
-ClipChainInsertGuiGuiClose:
-ClipChainInsertGuiOK:
-Gui, ClipChainInsertGui:Submit, Destroy
-ClipChainInsertActive:=1
-Return
-
-ClipChainInsertGuiCancel:
-Gui, ClipChainInsertGui:Destroy
-ClipChainInsertActive:=1
-Return
-
-ClipChainLoadFile:
-Menu, ClipChainLoadFile, Add
-Menu, ClipChainLoadFile, Delete
-Menu, ClipChainLoadFile, Add
-Menu, ClipChainLoadFile, Delete
-Menu, ClipChainLoadFile, Add, ClipChain.xml, MenuHandlerClipChainLoadFile
-Menu, ClipChainLoadFile, Add
-Loop, %ClipDataFolder%ClipChain\*.xml
-	{
-	 If (A_LoopFileName = "ClipChain.xml")
-		Continue
-	 Menu, ClipChainLoadFile, Add, %A_LoopFileName%, MenuHandlerClipChainLoadFile
-	}
-Menu, ClipChainLoadFile, Show
-Return
-
-MenuHandlerClipChainLoadFile:
-If (XA_Load(ClipDataFolder "ClipChain\" A_ThisMenuItem) = 1) ; the name of the variable containing the array is returned OR the value 1 in case of error
-	{
-	 MsgBox, 16, ClipChain, %A_ThisMenuItem% seems to be corrupt, starting new empty ClipChain.
-	 FileDelete, %ClipDataFolder%ClipChain\%A_ThisMenuItem%
-	 ClipChainData:=[]
-	}
-Gui, ClipChain:Default
-LV_Delete()
-Gosub, ClipChainListview
-Return
-
-InsertClipChainMenuHandler:
-; MsgBox % A_ThisMenuItem
-If (A_ThisMenuItem = "Clipboard")
-	ClipChainInsSpecial:="{CL3.ClipChain=Clipboard}"
-Else
-	ClipChainInsSpecial:="{CL3.ClipChain=Slot" SubStr(A_ThisMenuItem,0) "}"
-Gosub, ClipChainInsert
-Return
-
-; v1.5.1 for #If Hotkeys
-ClipChainActive()
-	{
-	 If (WinExist("CL3ClipChain ahk_class AutoHotkeyGUI") and (ClipChainPause <> 1))
-		Return true
-	 Else
-		Return false
-	}
-
-; https://www.autohotkey.com/boards/viewtopic.php?t=77789
-HoverTooltip:
-If !ClipChainPreview
-	Return
-If (Mouse_Hwnd = HLV)
-	{
-	 VarSetCapacity( LVHITTESTINFO, 24, 0 )       ;- allocate structure
-	 NumPut( Mouse_X, LVHITTESTINFO, 0, "Int" )   ;- fill coordinate data
-	 NumPut( Mouse_Y, LVHITTESTINFO, 4, "Int" )
-	 ;- http://msdn.microsoft.com/en-us/library/bb774754%28VS.85%29.aspx
-	 SendMessage, LVM_SUBITEMHITTEST, 0, &LVHITTESTINFO,, Ahk_ID %HLV%
-	 LVHT_Flags := NumGet( LVHITTESTINFO, 8, "Int" )
-	 LVHT_Row := 1 + NumGet( LVHITTESTINFO, 12, "Int" )
-	 LVHT_Column := 1 + NumGet( LVHITTESTINFO, 16, "Int" )
-	 LV_GetText(Cx,LVHT_Row,2) ; we need second column
-	 ;text= You are hovering over Row %LVHT_Row% and Col %LVHT_Column%`n%cx%
-	 Text=%cx%
-	 Text:=StrReplace(text,"\n","`n")
-	 ;WinGetPos, ttX, ttY, , ttHeight, ClipChain
-	 If (text = "ClipChain")
+	If (ClipChainIndex > ClipChainData.Length) or (ClipChainIndex <= 1)
 		{
-		 ToolTip
+		 if (ClipChainData.Length > 0) {
+			ogcLV.Modify(1, "Col1", "||")
+			ogcLV.Modify(1, "Vis")
+		 }
+		 return
+		}
+
+	ogcLV.Modify(ClipChainIndex, "Col1", ">>")
+	ogcLV.Modify(ClipChainIndex, "Vis")
+}
+
+ClipChainSet() {
+	global ClipChainData, ogcLV
+	ClipChainNewOrder := ""
+	ClipChainDataNew := []
+	Loop ogcLV.GetCount()
+		{
+		 ClipChainDataIndex := ogcLV.GetText(A_Index, 3)
+		 ClipChainNewOrder .= ClipChainDataIndex ","
+		}
+	ClipChainNewOrder := RTrim(ClipChainNewOrder, ",")
+	Loop Parse, ClipChainNewOrder, ","
+		ClipChainDataNew.Push(ClipChainData[Integer(A_LoopField)])
+	ClipChainData := ClipChainDataNew
+
+	; Update IDX column
+	Loop ogcLV.GetCount()
+		ogcLV.Modify(A_Index, "Col3", A_Index)
+	ClipChainUpdateIndicator()
+}
+
+ClipChainEditHandler(*) {
+	global ClipChainData, ClipChainGui, ogcLV, ClipChainPause
+	ClipChainInsEdit := 1
+	ClipChainPauseStore := ClipChainGui.Submit(false).ClipChainPause
+	ClipChainPause := 1
+	ClipChainGui["ClipChainPause"].Value := 1
+
+	LVCGIndex := ogcLV.GetNext()
+	If (LVCGIndex = 0)
+		LVCGIndex := 1
+	ClipChainDataIndex := ogcLV.GetText(LVCGIndex, 3)
+	If (ClipChainDataIndex = "")
+		ClipChainDataIndex := 1
+
+	editText := ClipChainData[Integer(ClipChainDataIndex)]
+	ClipChainInsertGuiShow("CL3ClipChain Edit text", editText, ClipChainDataIndex, true)
+}
+
+ClipChainInsertHandler(*) {
+	global ClipChainData, ClipChainGui, ogcLV, ClipChainPause, ClipChainInsSpecial
+	ClipChainPauseStore := ClipChainGui.Submit(false).ClipChainPause
+	ClipChainPause := 1
+	ClipChainGui["ClipChainPause"].Value := 1
+
+	LVCGIndex := ogcLV.GetNext()
+	If (LVCGIndex = 0)
+		LVCGIndex := 1
+	ClipChainDataIndex := ogcLV.GetText(LVCGIndex, 3)
+	If (ClipChainDataIndex = "")
+		ClipChainDataIndex := 1
+
+	insertText := ClipChainInsSpecial ? ClipChainInsSpecial : ""
+	ClipChainInsSpecial := ""
+
+	if (insertText = "")
+		ClipChainInsertGuiShow("CL3ClipChain Insert text", "", ClipChainDataIndex, false)
+	else {
+		; Direct insert for special items
+		ClipChainData.InsertAt(Integer(ClipChainDataIndex) + 1, insertText)
+		ogcLV.Insert(Integer(ClipChainDataIndex) + 1, "", "", ClipChainHelper(insertText))
+		; Update IDX
+		Loop ogcLV.GetCount()
+			ogcLV.Modify(A_Index, "Col3", A_Index)
+		ClipChainPause := ClipChainPauseStore
+		ClipChainGui["ClipChainPause"].Value := ClipChainPause
+		ClipChainSet()
+		XMLSave("ClipChainData")
+	}
+}
+
+ClipChainInsertGuiShow(title, text, dataIndex, isEdit) {
+	global ClipChainData, ClipChainGui, ogcLV, ClipChainPause
+
+	InsGui := Gui(, title)
+	InsGui.Add("Text", "x5 y5", "Insert text into chain after " dataIndex " item:")
+	InsGui.Add("Edit", "xp yp+20 w500 h300 vClipChainIns", text)
+	InsGui.Add("Button", "w100", "OK").OnEvent("Click", InsOK)
+	InsGui.Add("Button", "xp+120 w100", "Cancel").OnEvent("Click", InsCancel)
+	InsGui.Show()
+	return
+
+	InsOK(*) {
+		saved := InsGui.Submit()
+		if (saved.ClipChainIns = "") {
+			ClipChainPause := 0
+			ClipChainGui["ClipChainPause"].Value := 0
+			return
+		}
+		if isEdit {
+			ClipChainData[Integer(dataIndex)] := saved.ClipChainIns
+			ogcLV.Modify(Integer(dataIndex), "Col2", ClipChainHelper(saved.ClipChainIns))
+		} else {
+			ClipChainData.InsertAt(Integer(dataIndex) + 1, saved.ClipChainIns)
+			ogcLV.Insert(Integer(dataIndex) + 1, "", "", ClipChainHelper(saved.ClipChainIns))
+		}
+		; Update IDX
+		Loop ogcLV.GetCount()
+			ogcLV.Modify(A_Index, "Col3", A_Index)
+		ClipChainPause := 0
+		ClipChainGui["ClipChainPause"].Value := 0
+		ClipChainSet()
+		XMLSave("ClipChainData")
+	}
+
+	InsCancel(*) {
+		InsGui.Destroy()
+		ClipChainPause := 0
+		ClipChainGui["ClipChainPause"].Value := 0
+	}
+}
+
+ClipChainDel(*) {
+	global ClipChainData, ClipChainGui, ogcLV
+	XMLSave("ClipChainData", "-" A_Now)
+	LVCGIndex := ogcLV.GetNext()
+	If (LVCGIndex = 0)
+		LVCGIndex := 1
+	ClipChainDataIndex := Integer(ogcLV.GetText(LVCGIndex, 3))
+	ogcLV.Delete(LVCGIndex)
+	If (ClipChainData.Length != 0)
+		ClipChainData.RemoveAt(ClipChainDataIndex)
+	; Update IDX
+	Loop ogcLV.GetCount()
+		ogcLV.Modify(A_Index, "Col3", A_Index)
+	ClipChainSet()
+	XMLSave("ClipChainData")
+}
+
+ClipChainMoveUp(*) {
+	global ClipChainLvHandle
+	ClipChainLvHandle.Move(1)
+	ClipChainSet()
+}
+
+ClipChainMoveDown(*) {
+	global ClipChainLvHandle
+	ClipChainLvHandle.Move()
+	ClipChainSet()
+}
+
+ClipChainGuiCloseHandler(*) {
+	global ClipChainGui, ClipChainData, ClipDataFolder
+	ClipChainSaveWindowPosition()
+	ClipChainSet()
+	ClipChainGui.Hide()
+	XA_Save("ClipChainData", ClipDataFolder "ClipChain\ClipChain.xml")
+}
+
+ClipChainSaveWindowPosition() {
+	global ClipChainX, ClipChainY, ClipChainNoHistory, ClipChainTrans
+	global ClipChainKey, ClipChainSendAfter, ClipChainPause, ClipChainPreview
+	global ClipChainTrim, ClipChainTrimSet, ClipDataFolder, ClipChainGui
+
+	try {
+		WinGetPos(&ClipChainX, &ClipChainY,,, "CL3ClipChain ahk_class AutoHotkeyGUI")
+	}
+	saved := ClipChainGui.Submit(false)
+	local iniFile := ClipDataFolder "ClipChain\ClipChain.ini"
+	IniWrite(ClipChainX, iniFile, "Settings", "ClipChainX")
+	IniWrite(ClipChainY, iniFile, "Settings", "ClipChainY")
+	IniWrite(saved.ClipChainNoHistory, iniFile, "Settings", "ClipChainNoHistory")
+	IniWrite(saved.ClipChainTrans, iniFile, "Settings", "ClipChainTrans")
+	keyVal := (ClipChainKey = "[press to set]") ? "" : ClipChainKey
+	IniWrite(keyVal, iniFile, "Settings", "ClipChainKey")
+	IniWrite(saved.ClipChainSendAfter, iniFile, "Settings", "ClipChainSend")
+	IniWrite(saved.ClipChainPause, iniFile, "Settings", "ClipChainPause")
+	IniWrite(saved.ClipChainPreview, iniFile, "Settings", "ClipChainPreview")
+	IniWrite(saved.ClipChainTrim, iniFile, "Settings", "ClipChainTrim")
+	trimVal := (ClipChainTrimSet = "[press to set]") ? "" : ClipChainTrimSet
+	IniWrite(trimVal, iniFile, "Settings", "ClipChainTrimSet")
+}
+
+ClipChainLoad(*) {
+	global ClipChainData, ClipChainIndex, ogcLV
+	XMLSave("ClipChainData", "-" A_Now)
+	ClipChainIndex := 1
+	ClipChainData := RegExReplace(A_Clipboard, "m)^\s+$")
+	If (Asc(SubStr(ClipChainData, 1, 1)) = 65279)
+		ClipChainData := SubStr(ClipChainData, 2)
+	CCDelim := "`r`n`r`n"
+	ClipChainData := StrReplace(ClipChainData, CCDelim, Chr(7))
+	ClipChainData := StrSplit(ClipChainData, Chr(7))
+	ClipChainListviewPopulate()
+}
+
+ClipChainLoadDelim(*) {
+	global ClipChainData, ClipChainIndex, ogcLV
+	ib := InputBox("Set Delimiter(s) CSV (\n,\r,\t,\s,\c)`nUse \c for comma", "ClipChain Delimiter", "w300 h140", "\n")
+	If (ib.Result = "Cancel") or (ib.Value = "")
+		Return
+
+	CCDelim := ib.Value
+	CCDelim := StrReplace(CCDelim, "\n", "`n")
+	CCDelim := StrReplace(CCDelim, "\r", "`r")
+	CCDelim := StrReplace(CCDelim, "\t", "`t")
+	CCDelim := StrReplace(CCDelim, "\s", " ")
+
+	XMLSave("ClipChainData", "-" A_Now)
+	ClipChainIndex := 1
+	ClipChainData := RegExReplace(A_Clipboard, "m)^\s+$")
+	If (Asc(SubStr(ClipChainData, 1, 1)) = 65279)
+		ClipChainData := SubStr(ClipChainData, 2)
+
+	Loop Parse, CCDelim, ","
+		{
+		 If (A_LoopField = "\c")
+			{
+			 ClipChainData := StrReplace(ClipChainData, ",", Chr(7))
+			 continue
+			}
+		 ClipChainData := StrReplace(ClipChainData, A_LoopField, Chr(7))
+		}
+	ClipChainData := StrSplit(ClipChainData, Chr(7))
+	ClipChainListviewPopulate()
+}
+
+ClipChainSaveFile(*) {
+	global ClipChainGui, ClipDataFolder
+	ClipChainGui.Hide()
+	ib := InputBox("Save Clipchain as", "Name for XML")
+	SaveAsName := ib.Value
+	If (SaveAsName = "") || (ib.Result = "Cancel")
+		{
+		 MsgBox("Enter filename!`nChain not saved.")
+		 ClipChainGui.Show()
 		 Return
 		}
-	 text:=text
-	 DisplayToolTip(text)
-	 SetTimer, ToolTipTimer, 3000
-	 Return
-	}
-ToolTip
-Return
+	SaveAsName := StrReplace(SaveAsName, ".xml", "")
+	XA_Save("ClipChainData", ClipDataFolder "ClipChain\" SaveAsName ".xml")
+}
 
-DisplayToolTip(text,Columns=50)
-	{
-	 DispText := RegExReplace(Text, "(.{1," . Columns . "})", "$1`n")
-	 ToolTip, % DispText ;, %ttX%, % tty + ttHeight
-	}
+ClipChainClear(*) {
+	global ogcLV, ClipChainData
+	ogcLV.Delete()
+	ClipChainData := []
+}
 
-ToolTipTimer:
-MouseGetPos, , , WinID
-WinGetTitle, WinTitle, ahk_id %WinID%
-If (WinTitle = "CL3ClipChain")
-	Return
-SetTimer, ToolTipTimer, Off
-ToolTip
-Return
+ClipChainLoadFile(*) {
+	global ClipDataFolder
+	FileMenu := Menu()
+	FileMenu.Add("ClipChain.xml", MenuHandlerClipChainLoadFile)
+	FileMenu.Add()
+	Loop Files, ClipDataFolder "ClipChain\*.xml"
+		{
+		 If (A_LoopFileName = "ClipChain.xml")
+			Continue
+		 FileMenu.Add(A_LoopFileName, MenuHandlerClipChainLoadFile)
+		}
+	FileMenu.Show()
+}
 
+MenuHandlerClipChainLoadFile(ItemName, *) {
+	global ClipChainData, ClipDataFolder, ogcLV
+	If (XA_Load(ClipDataFolder "ClipChain\" ItemName) = 1)
+		{
+		 MsgBox(ItemName " seems to be corrupt, starting new empty ClipChain.", "ClipChain", 16)
+		 FileDelete(ClipDataFolder "ClipChain\" ItemName)
+		 ClipChainData := []
+		}
+	ogcLV.Delete()
+	ClipChainListviewPopulate()
+}
 
-;--------------
-WM_MOUSEMOVE( wparam, lparam, msg, hwnd ) { ; ----------------------------------
-	Global Mouse_X, Mouse_Y, Mouse_Hwnd
-	Mouse_X := lparam & 0xFFFF       ;- store the mouse position relative
-	Mouse_Y := lparam >> 16          ;-     to the window's client areas client area
-	Mouse_Hwnd := hwndMouse_Hwnd := hwnd
-	Gosub,HoverTooltip
-} ; WM_MOUSEMOVE( wparam, lparam, msg, hwnd ) ----------------------------------}
+InsertClipChainMenuHandler(ItemName, *) {
+	global ClipChainInsSpecial
+	If (ItemName = "Clipboard")
+		ClipChainInsSpecial := "{CL3.ClipChain=Clipboard}"
+	Else
+		ClipChainInsSpecial := "{CL3.ClipChain=Slot" SubStr(ItemName, -1) "}"
+	ClipChainInsertHandler()
+}
+
+ClipChainActive() {
+	global ClipChainPause
+	If (WinExist("CL3ClipChain ahk_class AutoHotkeyGUI") and (ClipChainPause != 1))
+		Return true
+	Else
+		Return false
+}
+
+; Tooltip on hover
+DisplayToolTip(text, Columns := 50) {
+	DispText := RegExReplace(text, "(.{1," . Columns . "})", "$1`n")
+	ToolTip(DispText)
+}
+
+WM_MOUSEMOVE(wparam, lparam, msg, hwnd) {
+	global Mouse_X, Mouse_Y, Mouse_Hwnd, HLV, ClipChainPreview, LVM_SUBITEMHITTEST, ogcLV
+	Mouse_X := lparam & 0xFFFF
+	Mouse_Y := lparam >> 16
+	Mouse_Hwnd := hwnd
+
+	If !ClipChainPreview
+		Return
+	If (Mouse_Hwnd = HLV)
+		{
+		 LVHITTESTINFO := Buffer(24, 0)
+		 NumPut("Int", Mouse_X, LVHITTESTINFO, 0)
+		 NumPut("Int", Mouse_Y, LVHITTESTINFO, 4)
+		 SendMessage(LVM_SUBITEMHITTEST, 0, LVHITTESTINFO.Ptr,, "ahk_id " HLV)
+		 LVHT_Row := 1 + NumGet(LVHITTESTINFO, 12, "Int")
+		 if (LVHT_Row > 0) && (LVHT_Row <= ogcLV.GetCount()) {
+			Cx := ogcLV.GetText(LVHT_Row, 2)
+			text := StrReplace(Cx, "\n", "`n")
+			if (text = "ClipChain")
+				{
+				 ToolTip()
+				 Return
+				}
+			DisplayToolTip(text)
+			SetTimer((*) => ToolTip(), -3000)
+		 }
+		 Return
+		}
+	ToolTip()
+}
 
 #include %A_ScriptDir%\lib\class_lv_rows.ahk

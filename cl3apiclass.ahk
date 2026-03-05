@@ -22,224 +22,225 @@ History:
 
 */
 
-class CL3API
-	{
+class CL3API {
 
-	 State(toggle)
-		{
-		 if toggle in on,true,1
+	State(toggle) {
+		toggleLower := StrLower(String(toggle))
+		if (toggleLower = "on") || (toggleLower = "true") || (toggleLower = "1")
 			{
-			 OnClipboardChange("FuncOnClipboardChange", 1)
-			 Menu, tray, ToggleCheck, &Pause clipboard history
+			 OnClipboardChange(FuncOnClipboardChange, 1)
+			 A_TrayMenu.ToggleCheck("&Pause clipboard history")
 			 Try
-				Menu, Tray, Icon, res\cl3.ico
+				TraySetIcon("res\cl3.ico")
 			}
-		 else if toggle in off,false,0
-				{
-				 OnClipboardChange("FuncOnClipboardChange", 0)
-				 Menu, tray, ToggleCheck, &Pause clipboard history
-				 Try
-					Menu, Tray, Icon, res\cl3_clipboard_history_paused.ico
-				}
-		}
+		else if (toggleLower = "off") || (toggleLower = "false") || (toggleLower = "0")
+			{
+			 OnClipboardChange(FuncOnClipboardChange, 0)
+			 A_TrayMenu.ToggleCheck("&Pause clipboard history")
+			 Try
+				TraySetIcon("res\cl3_clipboard_history_paused.ico")
+			}
+	}
 
-	 Upper(Data)
-		{
-		 for k, v in jxon_load(data)
-			History[v].text:=Upper(History[v].text)
-		 return 1
-		}
+	Upper(Data) {
+		src := Data
+		for k, v in Jxon_Load(&src)
+			History[v]["text"] := StrUpper(History[v]["text"])
+		return 1
+	}
 
-	 Lower(Data)
-		{
-		 for k, v in jxon_load(data)
-			History[v].text:=Lower(History[v].text)
-		 return 1
-		}
+	Lower(Data) {
+		src := Data
+		for k, v in Jxon_Load(&src)
+			History[v]["text"] := StrLower(History[v]["text"])
+		return 1
+	}
 
-	 Title(Data)
-		{
-		 for k, v in jxon_load(data)
-			History[v].text:=Title(History[v].text)
-		 return 1
-		}
+	Title(Data) {
+		src := Data
+		for k, v in Jxon_Load(&src)
+			History[v]["text"] := StrTitle(History[v]["text"])
+		return 1
+	}
 
-	 Chain(Data)
-		{
-		 XMLSave("ClipChainData","-" A_Now) ; put variable name in quotes
-		 ClipChainData:=[]
-		 for k, v in jxon_load(data)
+	Chain(Data) {
+		global ClipChainData
+		XMLSave("ClipChainData", "-" A_Now)
+		ClipChainData := []
+		src := Data
+		for k, v in Jxon_Load(&src)
 			ClipChainData.Push(v)
-		 Gosub, ClipChainListview
-		 return 1
-		}
+		ClipChainListviewPopulate()
+		return 1
+	}
 
-	 ChainInsertAt(Index,Data)
-		{
-		 XMLSave("ClipChainData","-" A_Now) ; put variable name in quotes
-		 ClipChainData.InsertAt(Index,Data)
-		 Gosub, ClipChainListview
-		 return 1
-		}
+	ChainInsertAt(Index, Data) {
+		global ClipChainData
+		XMLSave("ClipChainData", "-" A_Now)
+		ClipChainData.InsertAt(Index, Data)
+		ClipChainListviewPopulate()
+		return 1
+	}
 
-	 ChainRemove(Index)
-		{
-		 XMLSave("ClipChainData","-" A_Now) ; put variable name in quotes
-		 ClipChainData.Remove(Index)
-		 Gosub, ClipChainListview
-		 return 1
-		}
+	ChainRemove(Index) {
+		global ClipChainData
+		XMLSave("ClipChainData", "-" A_Now)
+		ClipChainData.RemoveAt(Index)
+		ClipChainListviewPopulate()
+		return 1
+	}
 
-	 ChainClear()
-		{
-		 XMLSave("ClipChainData","-" A_Now) ; put variable name in quotes
-		 ClipChainDataNew:=[]
-		 Gosub, ClipChainListview
-		 return 1
-		}
+	ChainClear() {
+		global ClipChainData
+		XMLSave("ClipChainData", "-" A_Now)
+		ClipChainData := []
+		ClipChainListviewPopulate()
+		return 1
+	}
 
-
-	 Slot(SlotID,Data)
-		{
-		 if (SlotID = 10)
-			SlotID:=0
-		 if SlotID between 0 and 9
+	Slot(SlotID, Data) {
+		global Slots, SlotsGui
+		if (SlotID = 10)
+			SlotID := 0
+		if (SlotID >= 0) && (SlotID <= 9)
 			{
-			 XMLSave("Slots","-" A_Now) ; put variable name in quotes
-			 Slots[SlotID]:=Data
-			 XMLSave("Slots") ; put variable name in quotes
-			 GuiControl, Slots:Text, Slot%SlotID%, % Data ; update gui which we already setup in the Slots plugins
+			 XMLSave("Slots", "-" A_Now)
+			 Slots[SlotID + 1] := Data
+			 XMLSave("Slots")
+			 try SlotsGui["Slot" SlotID].Value := Data
 			}
-		 return 1
-		}
+		return 1
+	}
 
-	 SlotPaste(SlotID)
-		{
-		 if (SlotID = 10)
-			SlotID:=0
-		 OnClipboardChange("FuncOnClipboardChange", 0)
-		 Clipboard:=Slots[SlotID]
-		 PasteIt()
-		 Sleep 100
-		 Clipboard:=History[1].text
-		 OnClipboardChange("FuncOnClipboardChange", 1)
-		 stats.slots++
-		 return 1
-		}
+	SlotPaste(SlotID) {
+		global Slots, History, stats
+		if (SlotID = 10)
+			SlotID := 0
+		OnClipboardChange(FuncOnClipboardChange, 0)
+		A_Clipboard := Slots[SlotID + 1]
+		PasteIt()
+		Sleep(100)
+		A_Clipboard := History[1]["text"]
+		OnClipboardChange(FuncOnClipboardChange, 1)
+		stats["slots"]++
+		return 1
+	}
 
-	 SlotGet(SlotID)
-		{
-		 if (SlotID = 10)
-			SlotID:=0
-		 if SlotID between 0 and 9
-			Return Slots[SlotID]
-		 Return 0
-		}
+	SlotGet(SlotID) {
+		global Slots
+		if (SlotID = 10)
+			SlotID := 0
+		if (SlotID >= 0) && (SlotID <= 9)
+			Return Slots[SlotID + 1]
+		Return 0
+	}
 
-	 Burst(Data,reverse=0)
-		{
-		 XMLSave("History","-" A_Now) ; put variable name in quotes
-		 Loop, % Data.count()
+	Burst(Data, reverse := 0) {
+		global History
+		XMLSave("History", "-" A_Now)
+		Loop Data.Length
 			{
-			 If !Reverse
+			 lineCount := 0
+			 If !reverse
 				{
-				 StrReplace(Data[A_Index],"`n","`n",Count)
-				 History.Insert(1,{"text": Data[A_Index],"IconExe":"","lines":Count+1,"time":A_Now})
+				 StrReplace(Data[A_Index], "`n", "`n",, &lineCount)
+				 History.InsertAt(1, Map("text", Data[A_Index], "IconExe", "", "lines", lineCount + 1, "time", A_Now))
 				}
 			 else
 				{
-				 StrReplace(Data[A_Index],"`n","`n",Count)
-				 History.Insert(1,{"text": Data[Data.count()+1-A_Index],"IconExe":"","lines":Count+1,"time":A_Now})
+				 StrReplace(Data[A_Index], "`n", "`n",, &lineCount)
+				 History.InsertAt(1, Map("text", Data[Data.Length + 1 - A_Index], "IconExe", "", "lines", lineCount + 1, "time", A_Now))
 				}
 			}
-		 return 1
-		}
-
-	 GetSetting(Data)
-		{
-		 return SettingsObj[data]
-		}
-
-	 Fifo(Data)
-		{
-		 FifoApi(data)
-		 Gosub, FifoActiveMenu
-		 return 1
-		} 
-
-	 Paste(Data,key="")
-		{
-		 for k, v in jxon_load(data)
-			{
-			 clipboard:=History[v].text
-			 PasteIt()
-			 Sleep 100
-			 if key
-				Send %key%
-		 	}
-		 return
-		}
-
-	 Get(Data)
-		{
-		 tmpoutput:=[]
-		 for k, v in jxon_load(data)
-			tmpoutput.push(History[v].text)
-	;	 cl3api.Message("CL3 GET")	
-		 return jxon_dump(tmpoutput)
-		}
-
-	 InsertAt(Idx,Data)
-		{
-		 StrReplace(Data,"`n","`n",Count)
-		 History.InsertAt(Idx,{"text":Data,"IconExe":"","lines":Count+1,"time":A_Now})
-		 History_Save:=1
-		 return 1
-		}
-
-	 Remove(Data)
-		{
-		 XMLSave("History","-" A_Now) ; put variable name in quotes
-		 for k, v in jxon_load(data)
-			{
-			 History.Remove(k)
-			 History_Save:=1
-			}
-		 return 1
-		}
-
-	 Search(GetText,results="-1")
-		{
-		 tmpoutput:=[]
-		 re:="iUms)" GetText
-		 if InStr(GetText,A_Space) ; prepare regular expression to ensure search is done independent on the position of the words
-			re:="iUms)(?=.*" RegExReplace(GetText,"iUms)(.*)\s","$1)(?=.*") ")"
-
-		 for k, v in History
-			{
-			 if RegExMatch(v.text,re) 
-				tmpoutput.push(History[k].text)
-			 if (tmpoutput.count() = results)
-				break
-			}
-		 return jxon_dump(tmpoutput)
-		}
-
-	 SearchIdx(GetText,results="-1")
-		{
-		 tmpoutput:=[]
-		 re:="iUms)" GetText
-		 if InStr(GetText,A_Space) ; prepare regular expression to ensure search is done independent on the position of the words
-			re:="iUms)(?=.*" RegExReplace(GetText,"iUms)(.*)\s","$1)(?=.*") ")"
-
-		 for k, v in History
-			{
-			 if RegExMatch(v.text,re) 
-				tmpoutput.push(k)
-			 if (tmpoutput.count() = results)
-				break
-			}
-		 return jxon_dump(tmpoutput)
-		}
-
+		return 1
 	}
+
+	GetSetting(Data) {
+		global SettingsObj
+		return SettingsObj[Data]
+	}
+
+	Fifo(Data) {
+		FifoApi(Data)
+		FifoActiveMenu()
+		return 1
+	}
+
+	Paste(Data, key := "") {
+		global History
+		src := Data
+		for k, v in Jxon_Load(&src)
+			{
+			 A_Clipboard := History[v]["text"]
+			 PasteIt()
+			 Sleep(100)
+			 if key
+				Send(key)
+			}
+		return
+	}
+
+	Get(Data) {
+		global History
+		tmpoutput := []
+		src := Data
+		for k, v in Jxon_Load(&src)
+			tmpoutput.Push(History[v]["text"])
+		return Jxon_Dump(tmpoutput)
+	}
+
+	InsertAt(Idx, Data) {
+		global History, History_Save
+		lineCount := 0
+		StrReplace(Data, "`n", "`n",, &lineCount)
+		History.InsertAt(Idx, Map("text", Data, "IconExe", "", "lines", lineCount + 1, "time", A_Now))
+		History_Save := 1
+		return 1
+	}
+
+	Remove(Data) {
+		global History, History_Save
+		XMLSave("History", "-" A_Now)
+		src := Data
+		for k, v in Jxon_Load(&src)
+			{
+			 History.RemoveAt(k)
+			 History_Save := 1
+			}
+		return 1
+	}
+
+	Search(GetText, results := "-1") {
+		global History
+		tmpoutput := []
+		re := "iUms)" GetText
+		if InStr(GetText, A_Space)
+			re := "iUms)(?=.*" RegExReplace(GetText, "iUms)(.*)\s", "$1)(?=.*") ")"
+
+		for k, v in History
+			{
+			 if RegExMatch(v["text"], re)
+				tmpoutput.Push(History[k]["text"])
+			 if (tmpoutput.Length = Integer(results))
+				break
+			}
+		return Jxon_Dump(tmpoutput)
+	}
+
+	SearchIdx(GetText, results := "-1") {
+		global History
+		tmpoutput := []
+		re := "iUms)" GetText
+		if InStr(GetText, A_Space)
+			re := "iUms)(?=.*" RegExReplace(GetText, "iUms)(.*)\s", "$1)(?=.*") ")"
+
+		for k, v in History
+			{
+			 if RegExMatch(v["text"], re)
+				tmpoutput.Push(k)
+			 if (tmpoutput.Length = Integer(results))
+				break
+			}
+		return Jxon_Dump(tmpoutput)
+	}
+}

@@ -1,105 +1,124 @@
 Settings()
 	{
 	 global
-	 local SettingsOutputVar,A_UserProfile,folders,tmpfolder
-	 EnvGet, A_UserProfile, USERPROFILE
-	 ahk_folders:="AppData, AppDataCommon, Desktop, DesktopCommon, MyDocuments, StartMenuCommon, Programs, ProgramsCommon, ProgramFiles, StartMenu, Startup, StartupCommon, ScriptDir, UserName, WinDir, WorkingDir, UserProfile"
+	 local SettingsOutputVar, folders, tmpfolder
 
-	 CyclePlugins:=[]
-	 ini:=A_ScriptDir "\settings.ini"
+	 CyclePlugins := []
+	 ini := A_ScriptDir "\settings.ini"
 	 ; CyclePlugins
-	 IniRead, SettingsOutputVar, %ini%, plugins, CyclePlugins
+	 SettingsOutputVar := IniRead(ini, "plugins", "CyclePlugins", "ERROR")
 	 If (SettingsOutputVar = "ERROR")
 		{
-		 IniWrite, Title`,Lower`,Upper`,LowerReplaceSpace, %ini%, plugins, CyclePlugins
-		 SettingsOutputVar=Title,Lower,Upper,LowerReplaceSpace
+		 IniWrite("Title,Lower,Upper,LowerReplaceSpace", ini, "plugins", "CyclePlugins")
+		 SettingsOutputVar := "Title,Lower,Upper,LowerReplaceSpace"
 		}
-	 Loop, parse, SettingsOutputVar, CSV
+	 Loop Parse, SettingsOutputVar, ","
 		CyclePlugins.push(A_LoopField)
-	 CyclePlugins[0]:="<none>"
+	 CyclePlugins.InsertAt(1, "<none>") ; v2: arrays are 1-based, use index 1 for the "<none>" marker
 	 Stats_Create()
-	 IniRead, MaxHistory         , %ini%, settings, MaxHistory, 150
-	 IniRead, MenuWidth          , %ini%, settings, MenuWidth, 40
-	 IniRead, MoreHistory        , %ini%, settings, MoreHistory, 18
-	 IniRead, AllowDupes         , %ini%, settings, AllowDupes, 0
-	 IniRead, SearchWindowWidth  , %ini%, settings, SearchWindowWidth, 595
-	 IniRead, SearchWindowHeight , %ini%, settings, SearchWindowHeight, 300
-	 IniRead, ShowLines          , %ini%, settings, ShowLines, 0
-	 IniRead, ShowTime           , %ini%, settings, ShowTime, 0
-	 IniRead, AutoReplaceTrayTip , %ini%, settings, AutoReplaceTrayTip, 0
-	 IniRead, CopyDelay          , %ini%, settings, CopyDelay, 0
-	 IniRead, PasteDelay         , %ini%, settings, PasteDelay, 50
-	 IniRead, ActivateApi        , %ini%, settings, ActivateApi, 0
-	 IniRead, ActivateBackup     , %ini%, settings, ActivateBackup, 0
-	 IniRead, BackupTimer        , %ini%, settings, BackupTimer, 10
-	 IniRead, Exclude            , %ini%, settings, Exclude, 0
-	 IniRead, LineFormat         , %ini%, settings, LineFormat, \t(\l line),\t(\l lines)
-	 IniRead, TimeFormat         , %ini%, settings, TimeFormat, @|HH:mm
-	 IniRead, SettingsFolders    , %ini%, settings, SettingsFolders, 0
-	 IniRead, ShowSpecial        , %ini%, settings, ShowSpecial  , 1
-	 IniRead, ShowTemplates      , %ini%, settings, ShowTemplates, 1
-	 IniRead, ShowYank           , %ini%, settings, ShowYank     , 1
-	 IniRead, ShowMorehistory    , %ini%, settings, ShowMorehistory, 1
-	 IniRead, ShowExit           , %ini%, settings, ShowExit     , 1
-	 IniRead, ActivateCmdr       , %ini%, plugins , ActivateCmdr, 0
-	 ;IniRead, ActivateNotes      , %ini%, plugins , ActivateNotes, 0
+	 MaxHistory          := IniRead(ini, "settings", "MaxHistory", "150")
+	 MenuWidth           := IniRead(ini, "settings", "MenuWidth", "40")
+	 MoreHistory         := IniRead(ini, "settings", "MoreHistory", "18")
+	 AllowDupes          := IniRead(ini, "settings", "AllowDupes", "0")
+	 SearchWindowWidth   := IniRead(ini, "settings", "SearchWindowWidth", "595")
+	 SearchWindowHeight  := IniRead(ini, "settings", "SearchWindowHeight", "300")
+	 ShowLines           := IniRead(ini, "settings", "ShowLines", "0")
+	 ShowTime            := IniRead(ini, "settings", "ShowTime", "0")
+	 AutoReplaceTrayTip  := IniRead(ini, "settings", "AutoReplaceTrayTip", "0")
+	 CopyDelay           := IniRead(ini, "settings", "CopyDelay", "0")
+	 PasteDelay          := IniRead(ini, "settings", "PasteDelay", "50")
+	 ActivateApi         := IniRead(ini, "settings", "ActivateApi", "0")
+	 ActivateBackup      := IniRead(ini, "settings", "ActivateBackup", "0")
+	 BackupTimer         := IniRead(ini, "settings", "BackupTimer", "10")
+	 Exclude             := IniRead(ini, "settings", "Exclude", "0")
+	 LineFormat          := IniRead(ini, "settings", "LineFormat", "\t(\l line),\t(\l lines)")
+	 TimeFormat          := IniRead(ini, "settings", "TimeFormat", "@|HH:mm")
+	 SettingsFolders     := IniRead(ini, "settings", "SettingsFolders", "0")
+	 ShowSpecial         := IniRead(ini, "settings", "ShowSpecial", "1")
+	 ShowTemplates       := IniRead(ini, "settings", "ShowTemplates", "1")
+	 ShowYank            := IniRead(ini, "settings", "ShowYank", "1")
+	 ShowMorehistory     := IniRead(ini, "settings", "ShowMorehistory", "1")
+	 ShowExit            := IniRead(ini, "settings", "ShowExit", "1")
+	 ActivateCmdr        := IniRead(ini, "plugins", "ActivateCmdr", "0")
 	 If (Exclude = 0) or (Exclude = "Error")
-		Exclude:=""
-	 StringLower, Exclude, Exclude
+		Exclude := ""
+	 Exclude := StrLower(Exclude)
 
-	 if MenuWidth not between 19 and 101
-		MenuWidth:=40
+	 MenuWidth := Integer(MenuWidth)
+	 if (MenuWidth < 20) or (MenuWidth > 100)
+		MenuWidth := 40
 
 	 If (SettingsFolders = "") or (SettingsFolders = "ERROR") or (SettingsFolders = 0)
-		SettingsFolders:=""
+		SettingsFolders := ""
 
-	 folders:=SettingsFolders
+	 folders := SettingsFolders
 
-	 Loop, parse, ahk_folders, CSV
-	 	{
-		 tmpfolder:="A_" Trim(A_LoopField," ")
-		 folders:=StrReplace(folders,"%A_" Trim(A_LoopField," ") "%", %tmpfolder%)
-	 	}
+	 ; Replace A_ built-in variable references in folder paths
+	 ahk_vars := Map(
+		"A_AppData", A_AppData,
+		"A_AppDataCommon", A_AppDataCommon,
+		"A_Desktop", A_Desktop,
+		"A_DesktopCommon", A_DesktopCommon,
+		"A_MyDocuments", A_MyDocuments,
+		"A_StartMenuCommon", A_StartMenuCommon,
+		"A_Programs", A_Programs,
+		"A_ProgramsCommon", A_ProgramsCommon,
+		"A_ProgramFiles", A_ProgramFiles,
+		"A_StartMenu", A_StartMenu,
+		"A_Startup", A_Startup,
+		"A_StartupCommon", A_StartupCommon,
+		"A_ScriptDir", A_ScriptDir,
+		"A_UserName", A_UserName,
+		"A_WinDir", A_WinDir,
+		"A_WorkingDir", A_WorkingDir
+	 )
+	 ; Also support A_UserProfile via EnvGet
+	 ahk_vars["A_UserProfile"] := EnvGet("USERPROFILE")
 
-	 If InStr(TimeFormat,"|")
+	 for varName, varValue in ahk_vars
+		folders := StrReplace(folders, "%" varName "%", varValue)
+
+	 If InStr(TimeFormat, "|")
 		{
-		 TimeFormatIndicator:=StrSplit(TimeFormat,"|").1
-		 If TimeFormatIndicator is number
-		 	TimeFormatIndicator:=Chr(TimeFormatIndicator)
-		 TimeFormatIndicator:=A_Space TimeFormatIndicator A_Space	
-		 TimeFormatTime:=StrSplit(TimeFormat,"|").2
+		 TimeFormatIndicator := StrSplit(TimeFormat, "|")[1]
+		 If IsNumber(TimeFormatIndicator)
+		 	TimeFormatIndicator := Chr(Integer(TimeFormatIndicator))
+		 TimeFormatIndicator := A_Space TimeFormatIndicator A_Space
+		 TimeFormatTime := StrSplit(TimeFormat, "|")[2]
 		}
 	 Else
 		{
-		 TimeFormatIndicator:=""
-		 TimeFormatTime:=TimeFormat
+		 TimeFormatIndicator := ""
+		 TimeFormatTime := TimeFormat
 		}
-	 		
-	 ClipDataFolder:=StrSplit(folders,";").1 "\ClipData\"
+
+	 ClipDataFolder := StrSplit(folders, ";")[1] "\ClipData\"
 	 If (ClipDataFolder = "\ClipData\")
-		ClipDataFolder:=A_ScriptDir "\ClipData\"
-	 TemplateFolder:=StrSplit(folders,";").2 "\Templates\"
+		ClipDataFolder := A_ScriptDir "\ClipData\"
+	 TemplateFolder := StrSplit(folders, ";")[2] "\Templates\"
 	 If (TemplateFolder = "\Templates\")
-		TemplateFolder:=A_ScriptDir "\Templates\"
+		TemplateFolder := A_ScriptDir "\Templates\"
 
 	 If !FileExist(ClipDataFolder)
-		FileCreateDir, %ClipDataFolder%
-	 Loop, parse, % "History,ClipChain,AutoReplace,Slots,", CSV ; Notes
+		DirCreate(ClipDataFolder)
+	 Loop Parse, "History,ClipChain,AutoReplace,Slots,", ","
 		{
+		 If (A_LoopField = "")
+			continue
 		 If !FileExist(ClipDataFolder A_LoopField)
-			FileCreateDir, %ClipDataFolder%%A_LoopField%
+			DirCreate(ClipDataFolder A_LoopField)
 		}
 
 	 If !FileExist(TemplateFolder)
-		FileCreateDir, %TemplateFolder%
+		DirCreate(TemplateFolder)
 
-	 LineTextFormat:=StrSplit(StrReplace(LineFormat,"\t",A_Tab),",")
+	 LineTextFormat := StrSplit(StrReplace(LineFormat, "\t", A_Tab), ",")
 
-	 SettingsObj:={"MaxHistory":MaxHistory,"ActivateCmdr":ActivateCmdr}
-	 If (XA_Load(A_ScriptDir "\stats.xml") = 1) ; the name of the variable containing the array is returned OR the value 1 in case of error
+	 SettingsObj := Map("MaxHistory", MaxHistory, "ActivateCmdr", ActivateCmdr)
+	 If (XA_Load(A_ScriptDir "\stats.xml") = 1)
 		{
-		 MsgBox, 16, Stats, Stats.xml seems to be corrupt, starting new empty Stats.
-		 FileDelete, %A_ScriptDir%\Stats.xml
+		 MsgBox("Stats.xml seems to be corrupt, starting new empty Stats.", "Stats", 16)
+		 FileDelete(A_ScriptDir "\Stats.xml")
 		 Stats_Create()
 		}
 	 Settings_Default()
@@ -108,215 +127,223 @@ Settings()
 Settings_Default()
 	{
 	 global
- 	 Settings_Plugins:={ Plugins : "Title`,Lower`,Upper`,LowerReplaceSpace" }
-	 Settings_Hotkeys:={ hk_menu         :"^!v"
-		, hk_menu2         :""
-		, hk_plaintext     :"^+v"
-		, hk_slots         :"^#F12"
-		, hk_clipchain     :"^#F11"
-		, hk_clipchainpaste:"^v"
-		, hk_fifo          :"^#F10"
-		, hk_search        :"^#h"
-		, hk_cyclemodkey   :"LWin"
-		, hk_cyclebackward :"v"
-		, hk_cycleforward  :"c"
-		, hk_cycleplugins  :"f"
-		, hk_cyclecancel   :"x"
-		, hk_slot1         :">^1"
-		, hk_slot2         :">^2"
-		, hk_slot3         :">^3"
-		, hk_slot4         :">^4"
-		, hk_slot5         :">^5"
-		, hk_slot6         :">^6"
-		, hk_slot7         :">^7"
-		, hk_slot8         :">^8"
-		, hk_slot9         :">^9"
-		, hk_slot0         :">^0"
-		, hk_slotsmenu     :""
-		;, hk_notes         :"#n"
-		, hk_BypassAutoReplace :""
-		, hk_cmdr          :"#j" }
-	 Settings_Settings:={ MaxHistory :"150"
-		, MenuWidth         : 40
-		, MoreHistory       : 26
-		, AllowDupes        : 0
-		, SearchWindowWidth : 595
-		, SearchWindowHeight: 300
-		, ActivateApi       : 0
-		, ShowLines         : 1
-		, ShowTime          : 0
-		, AutoReplaceTrayTip: 0
-		, CopyDelay         : 0
-		, PasteDelay        : 50
-		, ShowSpecial       : 1
-		, ShowYank          : 1
-		, ShowTemplates     : 1
-		, ShowMorehistory   : 1
-		, ShowExit          : 1
-		, Exclude           : ""
-		, TimeFormat        : "@|HH:mm"		
-		, LineFormat        : "\t(\l line),\t(\l lines)" }
+	 Settings_Plugins := Map("Plugins", "Title,Lower,Upper,LowerReplaceSpace")
+	 Settings_Hotkeys := Map(
+		"hk_menu", "^!v",
+		"hk_menu2", "",
+		"hk_plaintext", "^+v",
+		"hk_slots", "^#F12",
+		"hk_clipchain", "^#F11",
+		"hk_clipchainpaste", "^v",
+		"hk_fifo", "^#F10",
+		"hk_search", "^#h",
+		"hk_cyclemodkey", "LWin",
+		"hk_cyclebackward", "v",
+		"hk_cycleforward", "c",
+		"hk_cycleplugins", "f",
+		"hk_cyclecancel", "x",
+		"hk_slot1", ">^1",
+		"hk_slot2", ">^2",
+		"hk_slot3", ">^3",
+		"hk_slot4", ">^4",
+		"hk_slot5", ">^5",
+		"hk_slot6", ">^6",
+		"hk_slot7", ">^7",
+		"hk_slot8", ">^8",
+		"hk_slot9", ">^9",
+		"hk_slot0", ">^0",
+		"hk_slotsmenu", "",
+		"hk_BypassAutoReplace", "",
+		"hk_cmdr", "#j"
+	 )
+	 Settings_Settings := Map(
+		"MaxHistory", "150",
+		"MenuWidth", 40,
+		"MoreHistory", 26,
+		"AllowDupes", 0,
+		"SearchWindowWidth", 595,
+		"SearchWindowHeight", 300,
+		"ActivateApi", 0,
+		"ShowLines", 1,
+		"ShowTime", 0,
+		"AutoReplaceTrayTip", 0,
+		"CopyDelay", 0,
+		"PasteDelay", 50,
+		"ShowSpecial", 1,
+		"ShowYank", 1,
+		"ShowTemplates", 1,
+		"ShowMorehistory", 1,
+		"ShowExit", 1,
+		"Exclude", "",
+		"TimeFormat", "@|HH:mm",
+		"LineFormat", "\t(\l line),\t(\l lines)"
+	 )
 	}
 
 Stats_Create()
 	{
 	 global stats
-	 IfNotExist, %A_ScriptDir%\stats.xml
+	 if !FileExist(A_ScriptDir "\stats.xml")
 		{
-		 stats:={}
-		 stats.cyclepaste:=0
-		 stats.cycleplugins:=0
-		 stats.menu:=0
-		 stats.templates:=0
-		 stats.slots:=0
-		 stats.clipchain:=0
-		 stats.search:=0
-		 stats.edit:=0
-		 stats.fifo:=0
-		 stats.templates:=0
-		 stats.copieditems:=0
-		 XA_Save("stats",A_ScriptDir "\stats.xml")
+		 stats := Map()
+		 stats["cyclepaste"] := 0
+		 stats["cycleplugins"] := 0
+		 stats["menu"] := 0
+		 stats["templates"] := 0
+		 stats["slots"] := 0
+		 stats["clipchain"] := 0
+		 stats["search"] := 0
+		 stats["edit"] := 0
+		 stats["fifo"] := 0
+		 stats["templates"] := 0
+		 stats["copieditems"] := 0
+		 XA_Save("stats", A_ScriptDir "\stats.xml")
 		}
 	}
 
 Settings_Hotkeys()
 	{
 	 global
-	 local ini,index,keylist
-	 ini:=A_ScriptDir "\settings.ini"
+	 local ini, index
+	 ini := A_ScriptDir "\settings.ini"
 
-	 IniRead, hk_menu          , %ini%, Hotkeys, hk_menu          ,^!v
-	 IniRead, hk_menu2         , %ini%, Hotkeys, hk_menu2         ,ERROR
-	 IniRead, hk_plaintext     , %ini%, Hotkeys, hk_plaintext     ,^+v
-	 IniRead, hk_slots         , %ini%, Hotkeys, hk_slots         ,^#F12
-	 IniRead, hk_clipchain     , %ini%, Hotkeys, hk_clipchain     ,^#F11
-	 IniRead, hk_clipchainpaste, %ini%, Hotkeys, hk_clipchainpaste,^v
-	 IniRead, hk_fifo          , %ini%, Hotkeys, hk_fifo          ,^#F10
-	 IniRead, hk_search        , %ini%, Hotkeys, hk_search        ,^#h
-	 IniRead, hk_cyclemodkey   , %ini%, Hotkeys, hk_cyclemodkey   ,LWin
-	 IniRead, hk_cyclebackward , %ini%, Hotkeys, hk_cyclebackward ,v
-	 IniRead, hk_cycleforward  , %ini%, Hotkeys, hk_cycleforward  ,c
-	 IniRead, hk_cycleplugins  , %ini%, Hotkeys, hk_cycleplugins  ,f
-	 IniRead, hk_cyclecancel   , %ini%, Hotkeys, hk_cyclecancel   ,x
-	 ;IniRead, hk_notes         , %ini%, Hotkeys, hk_notes         ,#n
-	 IniRead, hk_cmdr          , %ini%, Hotkeys, hk_cmdr          ,#j
-	 IniRead, hk_BypassAutoReplace, %ini%, Hotkeys, hk_BypassAutoReplace
+	 hk_menu           := IniRead(ini, "Hotkeys", "hk_menu", "^!v")
+	 hk_menu2          := IniRead(ini, "Hotkeys", "hk_menu2", "ERROR")
+	 hk_plaintext      := IniRead(ini, "Hotkeys", "hk_plaintext", "^+v")
+	 hk_slots          := IniRead(ini, "Hotkeys", "hk_slots", "^#F12")
+	 hk_clipchain      := IniRead(ini, "Hotkeys", "hk_clipchain", "^#F11")
+	 hk_clipchainpaste := IniRead(ini, "Hotkeys", "hk_clipchainpaste", "^v")
+	 hk_fifo           := IniRead(ini, "Hotkeys", "hk_fifo", "^#F10")
+	 hk_search         := IniRead(ini, "Hotkeys", "hk_search", "^#h")
+	 hk_cyclemodkey    := IniRead(ini, "Hotkeys", "hk_cyclemodkey", "LWin")
+	 hk_cyclebackward  := IniRead(ini, "Hotkeys", "hk_cyclebackward", "v")
+	 hk_cycleforward   := IniRead(ini, "Hotkeys", "hk_cycleforward", "c")
+	 hk_cycleplugins   := IniRead(ini, "Hotkeys", "hk_cycleplugins", "f")
+	 hk_cyclecancel    := IniRead(ini, "Hotkeys", "hk_cyclecancel", "x")
+	 hk_cmdr           := IniRead(ini, "Hotkeys", "hk_cmdr", "#j")
+	 hk_BypassAutoReplace := IniRead(ini, "Hotkeys", "hk_BypassAutoReplace", "ERROR")
 	 If (hk_BypassAutoReplace = "ERROR")
-	 	hk_BypassAutoReplace:=""
+	 	hk_BypassAutoReplace := ""
 	 If (hk_menu2 = "ERROR")
-	 	hk_menu2:=""
+	 	hk_menu2 := ""
 
-	 Loop, 10
+	 ; Slot hotkeys stored in a Map
+	 hk_slot := Map()
+	 Loop 10
 		{
-		 Index:=A_Index-1
-		 IniRead, hk_slot%index%, %ini%, Hotkeys, hk_slot%index%, >^%index%
-		 If (hk_slot%index% <> "")
+		 index := A_Index - 1
+		 hk_slot[index] := IniRead(ini, "Hotkeys", "hk_slot" index, ">^" index)
+		 If (hk_slot[index] != "")
 			Try
-				Hotkey, % hk_slot%index%, hk_slotpaste
+				Hotkey(hk_slot[index], hk_slotpaste)
 		}
+	 ; Also set individual globals for GUI compatibility
+	 hk_slot0 := hk_slot[0], hk_slot1 := hk_slot[1], hk_slot2 := hk_slot[2]
+	 hk_slot3 := hk_slot[3], hk_slot4 := hk_slot[4], hk_slot5 := hk_slot[5]
+	 hk_slot6 := hk_slot[6], hk_slot7 := hk_slot[7], hk_slot8 := hk_slot[8]
+	 hk_slot9 := hk_slot[9]
 
-	 IniRead, hk_slotsmenu, %ini%, Hotkeys, hk_slotsmenu
+	 hk_slotsmenu := IniRead(ini, "Hotkeys", "hk_slotsmenu", "ERROR")
 	 If (hk_slotsmenu = "ERROR")
-		hk_slotsmenu:=""
-	 If (hk_slotsmenu <> "")
+		hk_slotsmenu := ""
+	 If (hk_slotsmenu != "")
 		{
-		 fn := func("ShowMenu").Bind("QuickSlotsMenu")
+		 fn := ShowMenu.Bind("QuickSlotsMenu")
 		 Try
-			Hotkey, %hk_slotsmenu%, % fn
+			Hotkey(hk_slotsmenu, fn)
 		}
 
 	 If !hk_menu
-		hk_menu:="^+v"
+		hk_menu := "^+v"
 	 Try
-			Hotkey, %hk_menu%             , hk_menu
+		Hotkey(hk_menu, hk_menu_handler)
 	 If hk_menu2
 		Try
-			Hotkey, %hk_menu2%           , hk_menu2
+			Hotkey(hk_menu2, hk_menu2_handler)
 	 If hk_plaintext
 		Try
-			Hotkey, %hk_plaintext%        , hk_plaintext
-	 Hotkey, %hk_clipchain%        , hk_clipchain
+			Hotkey(hk_plaintext, hk_plaintext_handler)
+	 Hotkey(hk_clipchain, hk_clipchain_handler)
 	 If hk_BypassAutoReplace
 		Try
-			Hotkey, %hk_BypassAutoReplace%, hk_BypassAutoReplace
+			Hotkey(hk_BypassAutoReplace, hk_BypassAutoReplace_handler)
 
 	 if (hk_clipchainpaste = "^v")
-		Hotkey, $%hk_clipchainpaste%, hk_clipchainpaste_defaultpaste
+		Hotkey("$" hk_clipchainpaste, hk_clipchainpaste_defaultpaste)
 
-	 Hotkey, If, ClipChainActive()
-	 Hotkey, $%hk_clipchainpaste%, ClipChainPasteDoubleClick
-	 Hotkey, If
+	 HotIf((*) => ClipChainActive())
+	 Hotkey("$" hk_clipchainpaste, ClipChainPasteDoubleClick)
+	 HotIf()
 	 If hk_fifo
 		Try
-			Hotkey, %hk_fifo%             , hk_fifo
+			Hotkey(hk_fifo, hk_fifo_handler)
 	 If hk_slots
 		Try
-			Hotkey, %hk_slots%            , hk_slots
+			Hotkey(hk_slots, hk_slots_handler)
 	 If hk_search
 		Try
-			Hotkey, %hk_search%           , hk_search
+			Hotkey(hk_search, hk_search_handler)
 	 If hk_cyclemodkey
 		{
 		 If hk_cyclebackward
 			{
 			 Try
-				Hotkey, %hk_cyclemodkey% & %hk_cyclebackward%   , hk_cyclebackward
+				Hotkey(hk_cyclemodkey " & " hk_cyclebackward, hk_cyclebackward_handler)
 			 Try
-				Hotkey, %hk_cyclemodkey% & %hk_cyclebackward% up, hk_cyclebackward_up
+				Hotkey(hk_cyclemodkey " & " hk_cyclebackward " up", hk_cyclebackward_up_handler)
 			}
 		 If hk_cycleforward
 			{
 			 Try
-				Hotkey, %hk_cyclemodkey% & %hk_cycleforward%    , hk_cycleforward
+				Hotkey(hk_cyclemodkey " & " hk_cycleforward, hk_cycleforward_handler)
 			 Try
-				Hotkey, %hk_cyclemodkey% & %hk_cycleforward% up , hk_cycleforward_up
+				Hotkey(hk_cyclemodkey " & " hk_cycleforward " up", hk_cycleforward_up_handler)
 			}
 		 If hk_cycleplugins
 			{
 			 Try
-				Hotkey, %hk_cyclemodkey% & %hk_cycleplugins%    , hk_cycleplugins
+				Hotkey(hk_cyclemodkey " & " hk_cycleplugins, hk_cycleplugins_handler)
 			 Try
-				Hotkey, %hk_cyclemodkey% & %hk_cycleplugins% up , hk_cycleplugins_up
+				Hotkey(hk_cyclemodkey " & " hk_cycleplugins " up", hk_cycleplugins_up_handler)
 			}
 		 If hk_cyclebackward
 			Try
-				Hotkey, %hk_cyclemodkey% & %hk_cyclecancel%     , hk_cyclecancel
+				Hotkey(hk_cyclemodkey " & " hk_cyclecancel, hk_cyclecancel_handler)
 		}
 	 If hk_cmdr
 		Try
-			Hotkey, %hk_cmdr%                               , hk_cmdr
-;	 If hk_notes
-;		Try
-;			Hotkey, %hk_notes%                              , hk_notes
+			Hotkey(hk_cmdr, hk_cmdr_handler)
 	 if !ActivateCmdr
 		Try
-			Hotkey, %hk_cmdr%, off
-;	 if !ActivateNotes
-;		Try
-;			Hotkey, %hk_notes%, off
+			Hotkey(hk_cmdr, "Off")
 	}
 
 Settings_PasteShortCuts()
 	{
-	 global PasteShortCuts:=[]
-	 i:=A_ScriptDir "\PasteShortCuts.ini"
+	 global PasteShortCuts := Map()
+	 i := A_ScriptDir "\PasteShortCuts.ini"
 	 If !FileExist(i)
 		Return
-	 IniRead, OutputVarSectionNames, %i%
-	 Loop, parse, OutputVarSectionNames, `n, `r
+	 OutputVarSectionNames := IniRead(i)
+	 Loop Parse, OutputVarSectionNames, "`n", "`r"
 	 	{
-		 IniRead, OutputVarPrograms, %i%, %A_LoopField%, Programs, 0
-		 IniRead, OutputVarKey, %i%, %A_LoopField%, Key, 0
-		 StringLower, OutputVarPrograms, OutputVarPrograms ; needed due to "StringCaseSense, On" set at startup
-		 OutputVarPrograms:=Trim(RegExReplace(OutputVarPrograms,"ms)\s*,\s*",","),",") ; trim spaces between program names e.g. program.exe , anotherprogram.exe
-		 If OutputVarPrograms not in 0,error
-		 	PasteShortCuts[A_LoopField,"programs"]:=OutputVarPrograms
-		 If OutputVarKey not in 0,Error
-		 	PasteShortCuts[A_LoopField,"key"]:=Trim(OutputVarKey,Chr(34))
-		 OutputVarPrograms:="",OutputVarKey:=""
+		 section := A_LoopField
+		 OutputVarPrograms := IniRead(i, section, "Programs", "0")
+		 OutputVarKey := IniRead(i, section, "Key", "0")
+		 OutputVarPrograms := StrLower(OutputVarPrograms)
+		 OutputVarPrograms := Trim(RegExReplace(OutputVarPrograms, "ms)\s*,\s*", ","), ",")
+		 If !(OutputVarPrograms ~= "i)^(0|error)$")
+			{
+			 if !PasteShortCuts.Has(section)
+				PasteShortCuts[section] := Map()
+		 	 PasteShortCuts[section]["programs"] := OutputVarPrograms
+			}
+		 If !(OutputVarKey ~= "i)^(0|error)$")
+			{
+			 if !PasteShortCuts.Has(section)
+				PasteShortCuts[section] := Map()
+		 	 PasteShortCuts[section]["key"] := Trim(OutputVarKey, Chr(34))
+			}
+		 OutputVarPrograms := "", OutputVarKey := ""
 	 	}
 	}
-
-Settings_menu:
-#Include %A_ScriptDir%\lib\SettingsGui.ahk
-

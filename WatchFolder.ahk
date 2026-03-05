@@ -1,97 +1,37 @@
 ; WatchFolder() by just me @ https://www.autohotkey.com/boards/viewtopic.php?t=8384
-; and https://github.com/AHK-just-me/WatchFolder/blob/master/Sources/WatchFolder.ahk
+; Converted to AHK v2
 
-
-; ==================================================================================================================================
-; Function:       Notifies about changes within folders.
-;                 This is a rewrite of HotKeyIt's WatchDirectory() released at
-;                    http://www.autohotkey.com/board/topic/60125-ahk-lv2-watchdirectory-report-directory-changes/
-; Tested with:    AHK 1.1.23.01 (A32/U32/U64)
-; Tested on:      Win 10 Pro x64
-; Usage:          WatchFolder(Folder, UserFunc[, SubTree := False[, Watch := 3]])
-; Parameters:
-;     Folder      -  The full qualified path of the folder to be watched.
-;                    Pass the string "**PAUSE" and set UserFunc to either True or False to pause respectively resume watching.
-;                    Pass the string "**END" and an arbitrary value in UserFunc to completely stop watching anytime.
-;                    If not, it will be done internally on exit.
-;     UserFunc    -  The name of a user-defined function to call on changes. The function must accept at least two parameters:
-;                    1: The path of the affected folder. The final backslash is not included even if it is a drive's root
-;                       directory (e.g. C:).
-;                    2: An array of change notifications containing the following keys:
-;                       Action:  One of the integer values specified as FILE_ACTION_... (see below).
-;                                In case of renaming Action is set to FILE_ACTION_RENAMED (4).
-;                       Name:    The full path of the changed file or folder.
-;                       OldName: The previous path in case of renaming, otherwise not used.
-;                       IsDir:   True if Name is a directory; otherwise False. In case of Action 2 (removed) IsDir is always False.
-;                    Pass the string "**DEL" to remove the directory from the list of watched folders.
-;     SubTree     -  Set to true if you want the whole subtree to be watched (i.e. the contents of all sub-folders).
-;                    Default: False - sub-folders aren't watched.
-;     Watch       -  The kind of changes to watch for. This can be one or any combination of the FILE_NOTIFY_CHANGES_...
-;                    values specified below.
-;                    Default: 0x03 - FILE_NOTIFY_CHANGE_FILE_NAME + FILE_NOTIFY_CHANGE_DIR_NAME
-; Return values:
-;     Returns True on success; otherwise False.
-; Change history:
-;     1.0.02.00/2016-11-30/just me        -  bug-fix for closing handles with the '**END' option.
-;     1.0.01.00/2016-03-14/just me        -  bug-fix for multiple folders
-;     1.0.00.00/2015-06-21/just me        -  initial release
-; License:
-;     The Unlicense -> http://unlicense.org/
-; Remarks:
-;     Due to the limits of the API function WaitForMultipleObjects() you cannot watch more than MAXIMUM_WAIT_OBJECTS (64)
-;     folders simultaneously.
-; MSDN:
-;     ReadDirectoryChangesW          msdn.microsoft.com/en-us/library/aa365465(v=vs.85).aspx
-;     FILE_NOTIFY_CHANGE_FILE_NAME   = 1   (0x00000001) : Notify about renaming, creating, or deleting a file.
-;     FILE_NOTIFY_CHANGE_DIR_NAME    = 2   (0x00000002) : Notify about creating or deleting a directory.
-;     FILE_NOTIFY_CHANGE_ATTRIBUTES  = 4   (0x00000004) : Notify about attribute changes.
-;     FILE_NOTIFY_CHANGE_SIZE        = 8   (0x00000008) : Notify about any file-size change.
-;     FILE_NOTIFY_CHANGE_LAST_WRITE  = 16  (0x00000010) : Notify about any change to the last write-time of files.
-;     FILE_NOTIFY_CHANGE_LAST_ACCESS = 32  (0x00000020) : Notify about any change to the last access time of files.
-;     FILE_NOTIFY_CHANGE_CREATION    = 64  (0x00000040) : Notify about any change to the creation time of files.
-;     FILE_NOTIFY_CHANGE_SECURITY    = 256 (0x00000100) : Notify about any security-descriptor change.
-;     FILE_NOTIFY_INFORMATION        msdn.microsoft.com/en-us/library/aa364391(v=vs.85).aspx
-;     FILE_ACTION_ADDED              = 1   (0x00000001) : The file was added to the directory.
-;     FILE_ACTION_REMOVED            = 2   (0x00000002) : The file was removed from the directory.
-;     FILE_ACTION_MODIFIED           = 3   (0x00000003) : The file was modified.
-;     FILE_ACTION_RENAMED            = 4   (0x00000004) : The file was renamed (not defined by Microsoft).
-;     FILE_ACTION_RENAMED_OLD_NAME   = 4   (0x00000004) : The file was renamed and this is the old name.
-;     FILE_ACTION_RENAMED_NEW_NAME   = 5   (0x00000005) : The file was renamed and this is the new name.
-;     GetOverlappedResult            msdn.microsoft.com/en-us/library/ms683209(v=vs.85).aspx
-;     CreateFile                     msdn.microsoft.com/en-us/library/aa363858(v=vs.85).aspx
-;     FILE_FLAG_BACKUP_SEMANTICS     = 0x02000000
-;     FILE_FLAG_OVERLAPPED           = 0x40000000
-; ==================================================================================================================================
 WatchFolder(Folder, UserFunc, SubTree := False, Watch := 0x03) {
-   Static DummyObject := {Base: {__Delete: Func("WatchFolder").Bind("**END", "")}}
+   Static DummyObject := {Base: {__Delete: WatchFolder.Bind("**END", "")}}
    Static TimerID := "**" . A_TickCount
-   Static TimerFunc := Func("WatchFolder").Bind(TimerID, "")
+   Static TimerFunc := WatchFolder.Bind(TimerID, "")
    Static MAXIMUM_WAIT_OBJECTS := 64
    Static MAX_DIR_PATH := 260 - 12 + 1
-   Static SizeOfLongPath := MAX_DIR_PATH << !!A_IsUnicode
-   Static SizeOfFNI := 0xFFFF ; size of the FILE_NOTIFY_INFORMATION structure buffer (64 KB)
-   Static SizeOfOVL := 32     ; size of the OVERLAPPED structure (64-bit)
-   Static WatchedFolders := {}
+   Static SizeOfLongPath := MAX_DIR_PATH * 2
+   Static SizeOfFNI := 0xFFFF
+   Static SizeOfOVL := 32
+   Static WatchedFolders := Map()
+   Static WatchedIndices := Map()
    Static EventArray := []
-   Static HandleArray := []
-   Static WaitObjects := 0
+   Static WaitObjectsBuf := 0
    Static BytesRead := 0
    Static Paused := False
-   ; ===============================================================================================================================
+
    If (Folder = "")
       Return False
-   SetTimer, % TimerFunc, Off
+   SetTimer(TimerFunc, 0)
    RebuildWaitObjects := False
-   ; ===============================================================================================================================
-   If (Folder = TimerID) { ; called by timer
-      If (ObjCount := EventArray.Length()) && !Paused {
-         ObjIndex := DllCall("WaitForMultipleObjects", "UInt", ObjCount, "Ptr", &WaitObjects, "Int", 0, "UInt", 0, "UInt")
+
+   If (Folder = TimerID) {
+      If (ObjCount := EventArray.Length) && !Paused {
+         ObjIndex := DllCall("WaitForMultipleObjects", "UInt", ObjCount, "Ptr", WaitObjectsBuf, "Int", 0, "UInt", 0, "UInt")
          While (ObjIndex >= 0) && (ObjIndex < ObjCount) {
-            FolderName := WatchedFolders[ObjIndex + 1]
+            FolderName := WatchedIndices[ObjIndex + 1]
             D := WatchedFolders[FolderName]
-            If DllCall("GetOverlappedResult", "Ptr", D.Handle, "Ptr", D.OVLAddr, "UIntP", BytesRead, "Int", True) {
+            BytesRead := 0
+            If DllCall("GetOverlappedResult", "Ptr", D.Handle, "Ptr", D.OVLBuf.Ptr, "UInt*", &BytesRead, "Int", True) {
                Changes := []
-               FNIAddr := D.FNIAddr
+               FNIAddr := D.FNIBuf.Ptr
                FNIMax := FNIAddr + BytesRead
                OffSet := 0
                PrevIndex := 0
@@ -116,93 +56,90 @@ WatchFolder(Folder, UserFunc, SubTree := False, Watch := 0x03) {
                   If (Action = 4)
                      PrevIndex := Changes.Push({Action: Action, OldName: Name, IsDir: 0})
                   Else If (Action = 5) && (PrevAction = 4) {
-                     Changes[PrevIndex, "Name"] := Name
-                     Changes[PrevIndex, "IsDir"] := IsDir
+                     Changes[PrevIndex].Name := Name
+                     Changes[PrevIndex].IsDir := IsDir
                   }
                   Else
                      PrevIndex := Changes.Push({Action: Action, Name: Name, IsDir: IsDir})
                   PrevAction := Action
                   PrevName := Name
                } Until (Offset = 0) || ((FNIAddr + Offset) > FNIMax)
-               If (Changes.Length() > 0)
+               If (Changes.Length > 0)
                   D.Func.Call(FolderName, Changes)
                DllCall("ResetEvent", "Ptr", EventArray[D.Index])
-               DllCall("ReadDirectoryChangesW", "Ptr", D.Handle, "Ptr", D.FNIAddr, "UInt", SizeOfFNI, "Int", D.SubTree
-                                              , "UInt", D.Watch, "UInt", 0, "Ptr", D.OVLAddr, "Ptr", 0)
+               DllCall("ReadDirectoryChangesW", "Ptr", D.Handle, "Ptr", D.FNIBuf.Ptr, "UInt", SizeOfFNI, "Int", D.SubTree
+                                              , "UInt", D.Watch, "UInt", 0, "Ptr", D.OVLBuf.Ptr, "Ptr", 0)
             }
-            ObjIndex := DllCall("WaitForMultipleObjects", "UInt", ObjCount, "Ptr", &WaitObjects, "Int", 0, "UInt", 0, "UInt")
-            Sleep, 0
+            ObjIndex := DllCall("WaitForMultipleObjects", "UInt", ObjCount, "Ptr", WaitObjectsBuf, "Int", 0, "UInt", 0, "UInt")
+            Sleep(0)
          }
       }
    }
-   ; ===============================================================================================================================
-   Else If (Folder = "**PAUSE") { ; called to pause/resume watching
+   Else If (Folder = "**PAUSE") {
       Paused := !!UserFunc
-      RebuildObjects := Paused
    }
-   ; ===============================================================================================================================
-   Else If (Folder = "**END") { ; called to stop watching
-      For K, D In WatchedFolders
-         If K Is Not Integer
-            DllCall("CloseHandle", "Ptr", D.Handle)
-      For Each, Event In EventArray
+   Else If (Folder = "**END") {
+      For FolderPath, D In WatchedFolders
+         DllCall("CloseHandle", "Ptr", D.Handle)
+      For Idx, Event In EventArray
          DllCall("CloseHandle", "Ptr", Event)
-      WatchedFolders := {}
+      WatchedFolders := Map()
+      WatchedIndices := Map()
       EventArray := []
       Paused := False
       Return True
    }
-   ; ===============================================================================================================================
-   Else { ; called to add, update, or remove folders
+   Else {
       Folder := RTrim(Folder, "\")
-      VarSetCapacity(LongPath, SizeOfLongPath, 0)
-      If !DllCall("GetLongPathName", "Str", Folder, "Ptr", &LongPath, "UInt", SizeOfLongPath)
+      LongPathBuf := Buffer(SizeOfLongPath, 0)
+      If !DllCall("GetLongPathName", "Str", Folder, "Ptr", LongPathBuf, "UInt", MAX_DIR_PATH)
          Return False
-      VarSetCapacity(LongPath, -1)
-      Folder := LongPath
-      If (WatchedFolders[Folder]) { ; update or remove
-         Handle := WatchedFolders[Folder, "Handle"]
-         Index  := WatchedFolders[Folder, "Index"]
+      Folder := StrGet(LongPathBuf)
+
+      If WatchedFolders.Has(Folder) {
+         D := WatchedFolders[Folder]
+         Handle := D.Handle
+         Index := D.Index
          DllCall("CloseHandle", "Ptr", Handle)
          DllCall("CloseHandle", "Ptr", EventArray[Index])
          EventArray.RemoveAt(Index)
-         WatchedFolders.RemoveAt(Index)
+         WatchedIndices.Delete(Index)
          WatchedFolders.Delete(Folder)
          RebuildWaitObjects := True
       }
-      If InStr(FileExist(Folder), "D") && (UserFunc <> "**DEL") && (EventArray.Length() < MAXIMUM_WAIT_OBJECTS) {
-         If (IsFunc(UserFunc) && (UserFunc := Func(UserFunc)) && (UserFunc.MinParams >= 2)) && (Watch &= 0x017F) {
-            Handle := DllCall("CreateFile", "Str", Folder . "\", "UInt", 0x01, "UInt", 0x07, "Ptr",0, "UInt", 0x03
+
+      If InStr(FileExist(Folder), "D") && (UserFunc != "**DEL") && (EventArray.Length < MAXIMUM_WAIT_OBJECTS) {
+         UserFuncObj := IsObject(UserFunc) ? UserFunc : %UserFunc%
+         Watch &= 0x017F
+         If (Watch) {
+            Handle := DllCall("CreateFile", "Str", Folder . "\", "UInt", 0x01, "UInt", 0x07, "Ptr", 0, "UInt", 0x03
                                           , "UInt", 0x42000000, "Ptr", 0, "UPtr")
             If (Handle > 0) {
                Event := DllCall("CreateEvent", "Ptr", 0, "Int", 1, "Int", 0, "Ptr", 0)
                Index := EventArray.Push(Event)
-               WatchedFolders[Index] := Folder
-               WatchedFolders[Folder] := {Func: UserFunc, Handle: Handle, Index: Index, SubTree: !!SubTree, Watch: Watch}
-               WatchedFolders[Folder].SetCapacity("FNIBuff", SizeOfFNI)
-               FNIAddr := WatchedFolders[Folder].GetAddress("FNIBuff")
-               DllCall("RtlZeroMemory", "Ptr", FNIAddr, "Ptr", SizeOfFNI)
-               WatchedFolders[Folder, "FNIAddr"] := FNIAddr
-               WatchedFolders[Folder].SetCapacity("OVLBuff", SizeOfOVL)
-               OVLAddr := WatchedFolders[Folder].GetAddress("OVLBuff")
-               DllCall("RtlZeroMemory", "Ptr", OVLAddr, "Ptr", SizeOfOVL)
-               NumPut(Event, OVLAddr + 8, A_PtrSize * 2, "Ptr")
-               WatchedFolders[Folder, "OVLAddr"] := OVLAddr
-               DllCall("ReadDirectoryChangesW", "Ptr", Handle, "Ptr", FNIAddr, "UInt", SizeOfFNI, "Int", SubTree
-                                              , "UInt", Watch, "UInt", 0, "Ptr", OVLAddr, "Ptr", 0)
+               FNIBuf := Buffer(SizeOfFNI, 0)
+               OVLBuf := Buffer(SizeOfOVL, 0)
+               NumPut("Ptr", Event, OVLBuf, A_PtrSize * 2)
+               WatchedIndices[Index] := Folder
+               WatchedFolders[Folder] := {Func: UserFuncObj, Handle: Handle, Index: Index, SubTree: !!SubTree, Watch: Watch, FNIBuf: FNIBuf, OVLBuf: OVLBuf}
+               DllCall("ReadDirectoryChangesW", "Ptr", Handle, "Ptr", FNIBuf.Ptr, "UInt", SizeOfFNI, "Int", SubTree
+                                              , "UInt", Watch, "UInt", 0, "Ptr", OVLBuf.Ptr, "Ptr", 0)
                RebuildWaitObjects := True
             }
          }
       }
+
       If (RebuildWaitObjects) {
-         VarSetCapacity(WaitObjects, MAXIMUM_WAIT_OBJECTS * A_PtrSize, 0)
-         OffSet := &WaitObjects
-         For Index, Event In EventArray
-            Offset := NumPut(Event, Offset + 0, 0, "Ptr")
+         WaitObjectsBuf := Buffer(MAXIMUM_WAIT_OBJECTS * A_PtrSize, 0)
+         OffSet := 0
+         For Index, Event In EventArray {
+            NumPut("Ptr", Event, WaitObjectsBuf, OffSet)
+            OffSet += A_PtrSize
+         }
       }
    }
-   ; ===============================================================================================================================
-   If (EventArray.Length() > 0)
-      SetTimer, % TimerFunc, -100
-   Return (RebuildWaitObjects) ; returns True on success, otherwise False
+
+   If (EventArray.Length > 0)
+      SetTimer(TimerFunc, -100)
+   Return (RebuildWaitObjects)
 }
