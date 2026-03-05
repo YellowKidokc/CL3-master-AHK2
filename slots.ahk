@@ -5,7 +5,7 @@ Purpose           : Load & Save 10 quick paste texts
 Version           : 1.5
 
 10 Slots
-Hotkeys: RCTRL-[1-0] 
+Hotkeys: RCTRL-[1-0]
 
 History:
 - 1.5 Adding QuickSlotsMenu, SlotsNamed
@@ -17,224 +17,221 @@ History:
 
 */
 
-SlotsInit:
+SlotsInit() {
+	global Slots, SlotsNamed, ClipDataFolder, SlotsGui
 
-If !IsObject(Slots)
-	{
-	 IfExist, %ClipDataFolder%Slots\Slots.xml
+	If !IsObject(Slots)
 		{
-		 If (XA_Load(ClipDataFolder "Slots\Slots.xml") = 1) ; the name of the variable containing the array is returned OR the value 1 in case of error
+		 if FileExist(ClipDataFolder "Slots\Slots.xml")
 			{
-			 MsgBox, 16, Slots, Slots.xml seems to be corrupt, starting a new Slots.xml
-			 FileDelete, %ClipDataFolder%Slots\Slots.xml
-			 Slots:=[]
+			 If (XA_Load(ClipDataFolder "Slots\Slots.xml") = 1)
+				{
+				 MsgBox("Slots.xml seems to be corrupt, starting a new Slots.xml", "Slots", 16)
+				 FileDelete(ClipDataFolder "Slots\Slots.xml")
+				 Slots := []
+				}
+			}
+		 else
+			{
+			 Slots := []
+			 Loop 10
+				Slots.Push("Slot" (A_Index - 1) "a")
 			}
 		}
-	 else
+
+	If !IsObject(SlotsNamed)
+		if FileExist(ClipDataFolder "Slots\SlotsNamed.xml")
+			XA_Load(ClipDataFolder "Slots\SlotsNamed.xml")
+
+	x := 10
+	y := 10
+	Index := 0
+
+	SlotsGui := Gui(, "CL3Slots")
+	SlotsGui.OnEvent("Close", (*) => SlotsGui.Hide())
+	SlotsGui.OnEvent("Escape", (*) => SlotsGui.Hide())
+	SlotsGui.SetFont(dpi("s8"))
+	Loop 10
 		{
-		 Slots:=[]
-		 Loop, 10
-			Slots[A_Index-1]:="Slot" A_Index-1 "a"
+		 Index++
+		 If (Index = 10)
+			Index := 0
+		 slotVal := (Slots.Length > Index) ? Slots[Index + 1] : ""
+		 SlotsGui.Add("Text", dpi("x" x " y" y), "Slot #" Index " [RCtrl + " Index "]")
+		 SlotsGui.Add("Edit", dpi("w290 h60 vSlot" Index), slotVal)
+		 y += 80
+		 if (A_Index = 5)
+			y := 10
+		 if (A_Index = 5)
+			x := 310
 		}
+	SlotsGui.Add("Button", dpi("x10"), "&Save Slots (slots.xml)").OnEvent("Click", SlotsSave)
+	SlotsGui.Add("Button", dpi("xp130"), "Save &As (name.xml)").OnEvent("Click", SlotsSaveAs)
+	SlotsGui.Add("Button", dpi("xp130"), "&Load (name.xml)").OnEvent("Click", LoadSlots)
+	SlotsGui.Add("Button", dpi("xp253"), "&Close window").OnEvent("Click", (*) => SlotsGui.Hide())
+}
+
+hk_slots_handler(*) {
+	global SlotsGui
+	If !WinExist("CL3Slots ahk_class AutoHotkeyGUI")
+		SlotsGui.Show()
+	else
+		SlotsGui.Hide()
+}
+
+hk_slotpaste(thisHotkey := "") {
+	global Slots, SlotKey, History, stats
+	OnClipboardChange(FuncOnClipboardChange, 0)
+	If (SlotKey = "")
+		SlotKey := SubStr(thisHotkey, -1)
+	slotIdx := Integer(SlotKey)
+	A_Clipboard := (Slots.Length > slotIdx) ? Slots[slotIdx + 1] : ""
+	PasteIt()
+	Sleep(100)
+	A_Clipboard := History[1]["text"]
+	OnClipboardChange(FuncOnClipboardChange, 1)
+	stats["slots"]++
+	SlotKey := ""
+}
+
+hk_slotpastenamed(*) {
+	global SlotsNamed, SlotKey, History, stats
+	OnClipboardChange(FuncOnClipboardChange, 0)
+	A_Clipboard := SlotsNamed.Has(SlotKey) ? SlotsNamed[SlotKey] : ""
+	PasteIt()
+	Sleep(100)
+	A_Clipboard := History[1]["text"]
+	OnClipboardChange(FuncOnClipboardChange, 1)
+	stats["slots"]++
+	SlotKey := ""
+}
+
+SlotsSave(*) {
+	global Slots, SlotsGui, ClipDataFolder
+	saved := SlotsGui.Submit(false)
+	SlotsGui.Hide()
+	XMLSave("Slots", "-" A_Now)
+	Loop 10
+		{
+		 idx := A_Index - 1
+		 if (idx = 0) && saved.HasProp("Slot0")
+			Slots[1] := saved.Slot0
+		 else
+			Slots[idx + 1] := saved.%"Slot" idx%
+		}
+	XMLSave("Slots")
+}
+
+SlotsSaveAs(*) {
+	global Slots, SlotsGui, ClipDataFolder
+	saved := SlotsGui.Submit(false)
+	SlotsGui.Hide()
+	ib := InputBox("Save slots as", "Name for XML")
+	SaveAsName := ib.Value
+	If (SaveAsName = "") || (ib.Result = "Cancel")
+		{
+		 MsgBox("Enter filename!`nSlots not saved.")
+		 SlotsGui.Show()
+		 Return
+		}
+	XMLSave("Slots", "-" A_Now)
+	Loop 10
+		{
+		 idx := A_Index - 1
+		 Slots[idx + 1] := saved.%"Slot" idx%
+		}
+	SaveAsName := StrReplace(SaveAsName, ".xml", "")
+	XA_Save("Slots", ClipDataFolder "Slots\" SaveAsName ".xml")
+}
+
+LoadSlots(*) {
+	global ClipDataFolder
+	SlotsLoadMenu := Menu()
+	SlotsLoadMenu.Add("Slots.xml", MenuHandlerSlots)
+	SlotsLoadMenu.Add()
+	Loop Files, ClipDataFolder "Slots\*.xml"
+		{
+		 If (A_LoopFileName = "slots.xml")
+			Continue
+		 SlotsLoadMenu.Add(A_LoopFileName, MenuHandlerSlots)
+		}
+	SlotsLoadMenu.Show()
+}
+
+MenuHandlerSlots(ItemName, *) {
+	global Slots, SlotsGui, ClipDataFolder
+	XMLSave("Slots", "-" A_Now)
+	Slots := []
+	If (XA_Load(ClipDataFolder "Slots\" ItemName) = 1)
+		{
+		 MsgBox(ItemName " seems to be corrupt, starting a new Slots file", "Slots", 16)
+		 FileDelete(ClipDataFolder "Slots\" ItemName)
+		 Slots := []
+		 Loop 10
+			Slots.Push("Slot" (A_Index - 1) "a")
+		}
+	Loop 10
+		{
+		 idx := A_Index - 1
+		 slotVal := (Slots.Length > idx) ? Slots[idx + 1] : ""
+		 SlotsGui["Slot" idx].Value := slotVal
+		}
+}
+
+BuildQuickSlotsMenu() {
+	global Slots, SlotsNamed, QuickSlotsMenu, SlotKey
+	QuickSlotsMenu := Menu()
+	Loop 9
+		QuickSlotsMenu.Add("&" A_Index ". " DispMenuText(SubStr(Slots.Length >= A_Index ? Slots[A_Index + 1] : "", 1, 500), -1), QuickSlotsMenuHandler)
+	QuickSlotsMenu.Add("&0. " DispMenuText(SubStr(Slots.Length >= 1 ? Slots[1] : "", 1, 500), -1), QuickSlotsMenuHandler)
+	QuickSlotsMenu.Add()
+	QuickSlotsMenu.Add("&Show Slots", QuickSlotsMenuHandler)
+	If IsObject(SlotsNamed) && (SlotsNamed is Map) && SlotsNamed.Count > 0
+		{
+		 QuickSlotsMenu.Add()
+		 for k, v in SlotsNamed
+			QuickSlotsMenu.Add("&" k ": " DispMenuText(SubStr(v, 1, 500), -1), QuickSlotsMenuHandler)
+		 QuickSlotsMenu.Add("&x Remove Named Slot", QuickSlotsMenuHandler)
+		}
+}
+
+QuickSlotsMenuHandler(ItemName, ItemPos, *) {
+	global SlotKey, SlotsNamed, ClipDataFolder
+	If (ItemName = "&x Remove Named Slot")
+		{
+		 DeleteEntry := ""
+		 for k, v in SlotsNamed
+			DeleteEntry .= k ","
+		 ib := InputBox("Enter name of slot(s) to delete (exact and csv)", "Delete Named Slot", "w500 h170", DeleteEntry)
+		 If (ib.Result = "Cancel")
+			return
+		 Loop Parse, ib.Value, ","
+			SlotsNamed.Delete(A_LoopField)
+		 XA_Save("SlotsNamed", ClipDataFolder "Slots\SlotsNamed.xml")
+		 BuildQuickSlotsMenu()
+		}
+	else If (ItemName = "&Show Slots")
+		hk_slots_handler()
+	else
+		{
+		 SlotKey := ItemPos
+		 If (SlotKey = 10)
+			SlotKey := 0
+		 if (SlotKey < 10)
+			hk_slotpaste()
+		 SlotKey := LTrim(StrSplit(ItemName, ":")[1], "&")
+		 hk_slotpastenamed()
+		 SlotKey := ""
+		}
+}
+
+ShowMenu(menuName, *) {
+	global
+	if (menuName = "QuickSlotsMenu") {
+		BuildQuickSlotsMenu()
+		QuickSlotsMenu.Show()
 	}
-
-If !IsObject(SlotsNamed)
-	 IfExist, %ClipDataFolder%Slots\SlotsNamed.xml
-		 XA_Load(ClipDataFolder "Slots\SlotsNamed.xml")
-
-x:=10
-y:=10
-Index:=0
-
-Gui, Slots:font,% dpi("s8")
-Loop, 10
-	{
-	 Index++
-	 If (Index = 10)
-		Index:=0
-	 Gui, Slots:Add, Text, % dpi("x" x " y" y),Slot #%Index% [RCtrl + %Index%]
-	 Gui, Slots:Add, Edit, % dpi("w290 h60 vSlot" Index), % Slots[Index]
-	 y+=80
-	 if (A_Index = 5)
-		y:=10
-	 if (A_Index = 5)
-		x:=310
-	}
-Gui, Slots:Add, Button, % dpi("x10 gSlotsSave"), &Save Slots (slots.xml)
-Gui, Slots:Add, Button, % dpi("xp130 gSlotsSaveAs"), Save &As (name.xml)
-Gui, Slots:Add, Button, % dpi("xp130 gLoadSlots"), &Load (name.xml)
-Gui, Slots:Add, Button, % dpi("xp253 gSlotsClose"), &Close window
-Return
-
-;^#F12::
-hk_slots:
-If !WinExist("CL3Slots ahk_class AutoHotkeyGUI")
-	Gui, Slots:Show, ,CL3Slots
-else
-	Gui, Slots:Hide
-Return
-
-;>^1::
-;>^2::
-;>^3::
-;>^4::
-;>^5::
-;>^6::
-;>^7::
-;>^8::
-;>^9::
-;>^0::
-hk_slotpaste:
-OnClipboardChange("FuncOnClipboardChange", 0)
-If (SlotKey = "")
-	SlotKey:=SubStr(A_thisHotkey,0)
-;If (SlotKey = 10) ; if we came via QuickSlotsMenuHandler
-;	SlotKey:=0
-Clipboard:=Slots[SlotKey]
-PasteIt()
-Sleep 100
-Clipboard:=History[1].text
-OnClipboardChange("FuncOnClipboardChange", 1)
-stats.slots++
-SlotKey:=""
-Return
-
-hk_slotpastenamed:
-OnClipboardChange("FuncOnClipboardChange", 0)
-Clipboard:=SlotsNamed[SlotKey]
-PasteIt()
-Sleep 100
-Clipboard:=History[1].text
-OnClipboardChange("FuncOnClipboardChange", 1)
-stats.slots++
-SlotKey:=""
-Return
-
-~Esc::
-SlotsGuiClose:
-SlotsClose:
-Gui, Slots:Cancel
-Return
-
-SlotsSave:
-Gui, Slots:Submit, Hide
-XMLSave("Slots","-" A_Now)
-Index:=0
-Loop, 10
-	{
-	 Slots[Index]:=Slot%Index%
-	 Index++
-	}
-XMLSave("Slots")
-Return
-
-SlotsSaveAs:
-SaveAsName:=""
-Gui, Slots:Submit, Hide
-InputBox, SaveAsName, Name for XML, Save slots as
-If (SaveAsName = "")
-	{
-	 MsgBox, Enter filename!`nSlots not saved.
-	 Gui, Slots:Show
-	 Return
-	}
-XMLSave("Slots","-" A_Now)
-Index:=0
-Loop, 10
-	{
-	 Slots[Index]:=Slot%Index%
-	 Index++
-	}
-StringReplace, SaveAsName, SaveAsName, .xml,,All
-XA_Save("Slots", ClipDataFolder "Slots\" SaveAsName ".xml") ; put variable name in quotes
-Return
-
-LoadSlots:
-Menu, SlotsMenu, Add
-Menu, SlotsMenu, Delete
-Menu, SlotsMenu, Add, Slots.xml, MenuHandlerSlots
-Menu, SlotsMenu, Add
-Loop, %ClipDataFolder%Slots\*.xml
-	{
-	 If (A_LoopFileName = "slots.xml")
-		Continue
-	 Menu, SlotsMenu, Add, %A_LoopFileName%, MenuHandlerSlots
-	}
-Menu, SlotsMenu, Show
-Return
-
-MenuHandlerSlots:
-XMLSave("Slots","-" A_Now)
-Slots:=[]
-If (XA_Load(ClipDataFolder "Slots\" A_ThisMenuItem) = 1) ; the name of the variable containing the array is returned OR the value 1 in case of error
-	{
-	 MsgBox, 16, Slots, %A_ThisMenuItem% seems to be corrupt, starting a new Slots file
-	 FileDelete, %ClipDataFolder%Slots\%A_ThisMenuItem%
-	 Slots:=[]
-	 Loop, 10
-		Slots[Index-1]:="Slot" A_Index-1 "a"
-	}
-Index:=0	
-Loop, 10
-	{
-	 GuiControl,Slots:, Slot%Index%, % Slots[Index]
-	 Index++
-	}
-Return
-
-QuickSlotsMenu:
-Try
-	Menu, QuickSlotsMenu, Delete
-Menu, QuickSlotsMenu, Add, % "&1. " DispMenuText(SubStr(Slots[1],1,500),-1), QuickSlotsMenuHandler
-Menu, QuickSlotsMenu, Add, % "&2. " DispMenuText(SubStr(Slots[2],1,500),-1), QuickSlotsMenuHandler
-Menu, QuickSlotsMenu, Add, % "&3. " DispMenuText(SubStr(Slots[3],1,500),-1), QuickSlotsMenuHandler
-Menu, QuickSlotsMenu, Add, % "&4. " DispMenuText(SubStr(Slots[4],1,500),-1), QuickSlotsMenuHandler
-Menu, QuickSlotsMenu, Add, % "&5. " DispMenuText(SubStr(Slots[5],1,500),-1), QuickSlotsMenuHandler
-Menu, QuickSlotsMenu, Add, % "&6. " DispMenuText(SubStr(Slots[6],1,500),-1), QuickSlotsMenuHandler
-Menu, QuickSlotsMenu, Add, % "&7. " DispMenuText(SubStr(Slots[7],1,500),-1), QuickSlotsMenuHandler
-Menu, QuickSlotsMenu, Add, % "&8. " DispMenuText(SubStr(Slots[8],1,500),-1), QuickSlotsMenuHandler
-Menu, QuickSlotsMenu, Add, % "&9. " DispMenuText(SubStr(Slots[9],1,500),-1), QuickSlotsMenuHandler
-Menu, QuickSlotsMenu, Add, % "&0. " DispMenuText(SubStr(Slots[0],1,500),-1), QuickSlotsMenuHandler
-Menu, QuickSlotsMenu, Add
-Menu, QuickSlotsMenu, Add, &Show Slots, QuickSlotsMenuHandler
-If IsObject(SlotsNamed)
-	{
-	 Menu, QuickSlotsMenu, Add
-	 for k, v in SlotsNamed
-		Menu, QuickSlotsMenu, Add, % "&" k ": " DispMenuText(SubStr(v,1,500),-1), QuickSlotsMenuHandler
-	 Menu, QuickSlotsMenu, Add, &x Remove Named Slot, QuickSlotsMenuHandler	
-	}
-;Menu, QuickSlotsMenu, Show
-Return
-
-QuickSlotsMenuHandler:
-If (A_ThisMenuItem = "&x Remove Named Slot")
-	{
-	 for k, v in SlotsNamed
-		DeleteEntry .= k ","
-	 InputBox, DeleteEntry, Delete Named Slot, Enter name of slot(s) to delete (exact and csv), , 500, 170, , , , , %DeleteEntry%
-	 If ErrorLevel
-		return
-	 Loop, parse, DeleteEntry, CSV
-		SlotsNamed.Delete(A_LoopField)
-	 XA_Save("SlotsNamed", ClipDataFolder "Slots\SlotsNamed.xml")
-	 Gosub, QuickSlotsMenu
-	 DeleteEntry:=""
-	}
-If (A_ThisMenuItem = "&Show Slots")
-	Gosub, hk_slots
-else
-	{
-	 SlotKey:=A_ThisMenuItemPos
-	 If (SlotKey = 10)
-		SlotKey:=0
-	 if (SlotKey < 10)
-		Gosub, hk_slotpaste
-	 SlotKey:=LTrim(StrSplit(A_ThisMenuItem,":").1,"&")
-	 Gosub, hk_slotpastenamed
-	 SlotKey:=""
-	}	
-Return
+}
 
 ; not public
 ;@Ahk2Exe-IgnoreBegin

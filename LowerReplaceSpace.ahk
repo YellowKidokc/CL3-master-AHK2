@@ -1,16 +1,14 @@
-﻿/*
+/*
 
 Plugin            : LowerReplaceSpace()
 Purpose           : Paste current clipboard (top most in menu) as lower case
-Version           : 1.0
-Last modified     : Wednesday, November 6, 2013
-CL3 version       : 1.0
+Version           : 2.0
+CL3 version       : 2.0
 
 */
 
 LowerReplaceSpace(Text)	{
-	 StringLower, text, text
-	 StringReplace, text, text, %A_Space%, _, All
+	 text := StrLower(text)
+	 text := StrReplace(text, A_Space, "_")
 	 return text
 	}
-	

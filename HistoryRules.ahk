@@ -3,40 +3,44 @@
 HistoryRules() to read rules from \HistoryRules.ini to allow CL3 to filter
 clipboard content before adding it to history, allowing or skipping text
 
-Version           : 1.0
-CL3 version       : 1.101
-
-History:
-- 1.0 initial version
+Version           : 2.0
+CL3 version       : 2.0
 
 */
 
 HistoryRules()
 	{
-	 Global
-	 local Global,Active,Copy,Filter,SectionNames
-	 HistoryRules:=[]
-	 IniRead, SectionNames, %A_ScriptDir%\HistoryRules.ini
+	 global HistoryRules := Map()
+	 local GlobalSetting, Active, Copy, Filter, SectionNames
+	 try
+		SectionNames := IniRead(A_ScriptDir "\HistoryRules.ini")
+	 catch
+		Return
 	 If (SectionNames = "")
-	 	Return
-	 
-	 Loop, parse, SectionNames, `n, `r
+		Return
+
+	 Loop Parse, SectionNames, "`n", "`r"
 		{
 		 If (A_LoopField = "Setting")
 			{
-			 IniRead, Global, %A_ScriptDir%\HistoryRules.ini, %A_LoopField%, Global
-			 If !Global ; HistoryRules is disabled so no need to try and read the rules
+			 GlobalSetting := IniRead(A_ScriptDir "\HistoryRules.ini", A_LoopField, "Global", "0")
+			 If !Integer(GlobalSetting)
 				break
-			 IniRead, Copy, %A_ScriptDir%\HistoryRules.ini, %A_LoopField%, Copy
-				HistoryRules["Copy"]:=Copy
+			 Copy := IniRead(A_ScriptDir "\HistoryRules.ini", A_LoopField, "Copy", "0")
+			 HistoryRules["Copy"] := Copy
 			}
-		 IniRead, Active, %A_ScriptDir%\HistoryRules.ini, %A_LoopField%, Active
-		 If (Active = "ERROR") or (Active = "")
+		 try
+			Active := IniRead(A_ScriptDir "\HistoryRules.ini", A_LoopField, "Active", "")
+		 catch
+			Active := ""
+		 If (Active = "") or (Active = "ERROR")
 			continue
-		 IniRead, Filter, %A_ScriptDir%\HistoryRules.ini, %A_LoopField%, filter
-		 If (Filter = "ERROR") or (Filter = "")
+		 try
+			Filter := IniRead(A_ScriptDir "\HistoryRules.ini", A_LoopField, "filter", "")
+		 catch
+			Filter := ""
+		 If (Filter = "") or (Filter = "ERROR")
 			continue
-		 HistoryRules[A_LoopField,"Active"]:=Active
-		 HistoryRules[A_LoopField,"Filter"]:=Filter
+		 HistoryRules[A_LoopField] := Map("Active", Active, "Filter", Filter)
 		}
 	}

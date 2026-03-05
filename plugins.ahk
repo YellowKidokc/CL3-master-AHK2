@@ -17,10 +17,10 @@ To add each plugin:
    The order in which they are listed is used for the menu entries.
 
 ; -----------------------------
-MyPluginlistFunc=
+MyPluginlistFunc := "
 (join|
 PluginScriptFunction.ahk
-)
+)"
 
 #include %A_ScriptDir%\plugins\PluginScriptFunction.ahk
 ; etc
@@ -28,7 +28,7 @@ PluginScriptFunction.ahk
 
 */
 
-pluginlistFunc= ; shown after "My Plugins" in special menu (so second or third)
+pluginlistFunc := "
 (join|
 AutoReplace.ahk
 ClipChain.ahk
@@ -37,9 +37,9 @@ DumpHistory.ahk
 Search.ahk
 Slots.ahk
 Fifo.ahk
-)
+)"
 
-pluginlistClip= ; shown first in Special menu
+pluginlistClip := "
 (join|
 Lower.ahk
 Title.ahk
@@ -48,15 +48,14 @@ Send.ahk
 LowerReplaceSpace.ahk
 PasteUnwrapped.ahk
 Upper.ahk
-)
+)"
 
-Gosub, SlotsInit
-Gosub, ClipChainInit
-Gosub, FifoInit
-Gosub, AutoReplaceInit
-Gosub, SortMenuSetup
-Gosub, ccmdersetup
-;Gosub, NotesMenuSetup
+SlotsInit()
+ClipChainInit()
+FifoInit()
+AutoReplaceInit()
+SortMenuSetup()
+ccmdersetup()
 
 ;@Ahk2Exe-IgnoreBegin
 #include *i %A_ScriptDir%\plugins\MyPlugins.ahk
@@ -72,9 +71,8 @@ Gosub, ccmdersetup
 #include %A_ScriptDir%\plugins\Sort.ahk
 #include %A_ScriptDir%\plugins\Search.ahk
 #include %A_ScriptDir%\plugins\DumpHistory.ahk
-#include %A_ScriptDir%\plugins\ClipChain.ahk	
-#include %A_ScriptDir%\plugins\Compact.ahk	
+#include %A_ScriptDir%\plugins\ClipChain.ahk
+#include %A_ScriptDir%\plugins\Compact.ahk
 #include %A_ScriptDir%\plugins\Fifo.ahk
 #include %A_ScriptDir%\plugins\PasteUnwrapped.ahk
 #include %A_ScriptDir%\plugins\ccmdr.ahk
-;#include %A_ScriptDir%\plugins\notes.ahk

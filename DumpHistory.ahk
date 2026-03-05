@@ -6,27 +6,29 @@ Version           : 1.0
 CL3 version       : 1.32
 */
 
-DumpHistory:
-DumpHistoryOutput:=""
-Gui, Search:Submit, Destroy
-for k, v in history
-	{
-	 If CBProgram
-	 	DumpHistoryOutput .= v.icon "`n"
-	 If CBText
-	 	DumpHistoryOutput .= v.text "`n`n-------------------------------------`n`n"
-	 FileDelete, % DumpFileName
-	 FileAppend, % DumpHistoryOutput, % DumpFileName
-	}
-Return
+DumpHistory() {
+	global History
 
-DumpHistory()	{
-	Gui, Search:Destroy
-	Gui, Search:+AlwaysOnTop
-	Gui, Search:Add, Checkbox, vCBText checked, Export Text
-	Gui, Search:Add, Checkbox, vCBProgram, Export Source (program)
-	Gui, Search:Add, Edit, vDumpFileName w200, history%A_Now%.txt
-	Gui, Search:Add, Button, gDumpHistory default, Export
-	Gui, Search:Show,Center, Export CL3 Clipboard History
+	DumpGui := Gui(, "Export CL3 Clipboard History")
+	DumpGui.Opt("+AlwaysOnTop")
+	DumpGui.Add("Checkbox", "vCBText checked", "Export Text")
+	DumpGui.Add("Checkbox", "vCBProgram", "Export Source (program)")
+	DumpGui.Add("Edit", "vDumpFileName w200", "history" A_Now ".txt")
+	DumpGui.Add("Button", "Default", "Export").OnEvent("Click", DoDumpHistory)
+	DumpGui.Show("Center")
+
+	DoDumpHistory(*) {
+		saved := DumpGui.Submit()
+		DumpHistoryOutput := ""
+		for k, v in History
+			{
+			 If saved.CBProgram
+			 	DumpHistoryOutput .= v["icon"] "`n"
+			 If saved.CBText
+			 	DumpHistoryOutput .= v["text"] "`n`n-------------------------------------`n`n"
+			}
+		if FileExist(saved.DumpFileName)
+			FileDelete(saved.DumpFileName)
+		FileAppend(DumpHistoryOutput, saved.DumpFileName)
 	}
-	
+}
